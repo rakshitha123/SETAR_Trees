@@ -1,59 +1,6 @@
 BASE_DIR <- "C:/Projects/Trees/"
-DATASET_DIR <- "C:/Projects/TSForecasting/"
 
-source(file.path(DATASET_DIR, "utils", "data_loader.R", fsep = "/"))
-source(file.path(BASE_DIR, "utils", "global_model_helper.R", fsep = "/"))
-source(file.path(BASE_DIR, "utils", "error_calculator.R", fsep = "/"))
-
-set.seed(1)
-
-LOW_FREQUENCIES <- c("4_seconds", "minutely", "10_minutes", "half_hourly", "hourly")
-HIGH_FREQUENCIES <- c("daily", "weekly", "monthly", "quarterly", "yearly")
-FREQUENCIES <- c(LOW_FREQUENCIES, HIGH_FREQUENCIES)
-
-VALUE_COL_NAME <- "series_value"
-
-# seasonality values corresponding with the frequencies: 4_seconds, minutely, 10_minutes, half_hourly, hourly, daily, weekly, monthly, quarterly and yearly
-# consider multiple seasonalities for frequencies less than daily
-SEASONALITY_VALS <- list()
-SEASONALITY_VALS[[1]] <- c(21600, 151200, 7889400)
-SEASONALITY_VALS[[2]] <- c(1440, 10080, 525960)
-SEASONALITY_VALS[[3]] <- c(144, 1008, 52596)
-SEASONALITY_VALS[[4]] <- c(48, 336, 17532)
-SEASONALITY_VALS[[5]] <- c(24, 168, 8766)
-SEASONALITY_VALS[[6]] <- 7
-SEASONALITY_VALS[[7]] <- 365.25/7
-SEASONALITY_VALS[[8]] <- 12 
-SEASONALITY_VALS[[9]] <- 4
-SEASONALITY_VALS[[10]] <- 1  
-
-SEASONALITY_MAP <- list()
-
-for(f in seq_along(FREQUENCIES))
-  SEASONALITY_MAP[[FREQUENCIES[f]]] <- SEASONALITY_VALS[[f]]
-
-
-# For testing
-# input_file_name <- "nn5_daily_dataset_without_missing_values.ts"
-# lag <- 10
-# key <- "series_name"
-# index <- "start_timestamp"
-# forecast_horizon <- 56
-# dataset_name = "nn5_daily"
-# integer_conversion = F
-# depth = 2
-
-# input_file_name <- "chaotic_logistic_dataset.ts"
-# lag <- 10
-# key <- "series_name"
-# index <- NULL
-# forecast_horizon <- 8
-# dataset_name = "chaotic_logistic"
-# integer_conversion = F
-# depth = 4
-# optimizer = "BFGS"
-# significance = 0.05
-# validation_size = 50
+source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 
 
 get_leaf_instances <- function(original_instance, gamma_vals, thresholds, th_lags){
@@ -93,18 +40,6 @@ G <- function(z, gamma, th) {
 }
 
 
-fit_global_model <- function(fitting_data, test_data = NULL) {
-  model <- glm(formula = create_formula(fitting_data), data = fitting_data)
-  
-  if(is.null(test_data))
-    global_predictions  <- model$fitted.values
-  else  
-    global_predictions <- predict.glm(object = model, newdata = as.data.frame(test_data))
-  
-  list("predictions" = global_predictions, "model" = model)
-}
-
-
 create_split <- function(data, gamma, th, th_lag){
   left_node <- data* G(data[-1][,th_lag], gamma, th)
   right_node <- data* (1 - G(data[-1][,th_lag], gamma, th))
@@ -123,6 +58,11 @@ do_lstar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   embedded_series <- result[[1]]
   final_lags <- result[[2]]
   # series_means <- result[[3]]
+  
+  
+  # Start timestamp
+  start_time <- Sys.time()
+  
   
   if(is.null(validation_size)){
     initial_predictions <- fit_global_model(embedded_series)$predictions
@@ -188,7 +128,7 @@ do_lstar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
       
       for(lg in 1:lag){
         print(lg)
-        ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the data
+        ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
         IDS <- as.matrix(expand.grid(gammas, ths) ) 
         
         for(ids in 1:nrow(IDS)){
@@ -305,6 +245,7 @@ do_lstar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   }
   
   
+  # Check whether the tree has any nodes. If not, train a single pooled regression model
   if(length(tree) > 0){
     leaf_nodes <- tree[[length(tree)]]
     leaf_trained_models <- list()
@@ -317,7 +258,6 @@ do_lstar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   }else{
     final_trained_model <- fit_global_model(embedded_series)[["model"]]
   }
-  
   
   
   # Forecasting
@@ -357,6 +297,11 @@ do_lstar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     }
   }
  
+  
+  # Finish timestamp
+  end_time <- Sys.time()
+  
+  
   if(integer_conversion)
     forecasts <- round(forecasts)
   
@@ -365,11 +310,17 @@ do_lstar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   else
     file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_optimizer_", optimizer, "_validation_size_", validation_size, "_lstar")
   
-  write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote=FALSE)
+  write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", "star", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
   
   print(gamma_vals)
   print(thresholds)
   print(th_lags)
+  
+  # Execution time
+  exec_time <- end_time - start_time
+  print(exec_time)
+  write(paste(exec_time, attr(exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", paste0(file_name, ".txt"), fsep = "/"), append = FALSE)
+  
   
   calculate_errors(forecasts, test_set, training_set, seasonality, file_name)
 }
@@ -377,51 +328,60 @@ do_lstar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
 
 # Experiments
 
-# NN5 Daily
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 1, optimizer = "BFGS")
-
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS")
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 2, optimizer = "BFGS")
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 4, optimizer = "BFGS")
-
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS", validation_size = 50)
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS", validation_size = 200)
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS", validation_size = 500)
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS", validation_size = 1000)
-do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 4, optimizer = "BFGS", validation_size = 1000)
-
-
 # Chaotic Logistic
-do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, optimizer = "Nelder-Mead")
-do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, optimizer = "BFGS")
-do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 2, index = NULL, optimizer = "BFGS")
-do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 4, index = NULL, optimizer = "BFGS")
+# do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, optimizer = "Nelder-Mead")
+# do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, optimizer = "BFGS")
+# do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 2, index = NULL, optimizer = "BFGS")
+# do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 4, index = NULL, optimizer = "BFGS")
+# do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 10, index = NULL, significance = 0.001, optimizer = "BFGS")
 
-do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, optimizer = "BFGS", validation_size = 50)
-do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 2, index = NULL, optimizer = "BFGS", validation_size = 50)
-do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 4, index = NULL, optimizer = "BFGS", validation_size = 50)
+# do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, optimizer = "BFGS", validation_size = 50)
+# do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 2, index = NULL, optimizer = "BFGS", validation_size = 50)
+# do_lstar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 4, index = NULL, optimizer = "BFGS", validation_size = 50)
 
 
 # Mackey glass
-do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, optimizer = "Nelder-Mead")
-do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, optimizer = "BFGS")
-do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 2, index = NULL, optimizer = "BFGS")
-do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 4, index = NULL, optimizer = "BFGS")
+# do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, optimizer = "Nelder-Mead")
+# do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, optimizer = "BFGS")
+# do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 2, index = NULL, optimizer = "BFGS")
+# do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 4, index = NULL, optimizer = "BFGS")
+# do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 10, index = NULL, significance = 0.001, optimizer = "BFGS")
 
-do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, optimizer = "BFGS", validation_size = 50)
-do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, optimizer = "BFGS", validation_size = 200)
-do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 4, index = NULL, optimizer = "BFGS", validation_size = 200)
+# do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, optimizer = "BFGS", validation_size = 50)
+# do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, optimizer = "BFGS", validation_size = 200)
+# do_lstar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 4, index = NULL, optimizer = "BFGS", validation_size = 200)
+
+
+# NN5 Daily
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 1, optimizer = "BFGS")
+# 
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS")
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 2, optimizer = "BFGS")
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 4, optimizer = "BFGS")
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 6, significance = 0.001, optimizer = "BFGS")
+
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS", validation_size = 50)
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS", validation_size = 200)
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS", validation_size = 500)
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, optimizer = "BFGS", validation_size = 1000)
+# do_lstar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 4, optimizer = "BFGS", validation_size = 1000)
 
 
 # Kaggle daily
-do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, optimizer = "BFGS")
-do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 2, integer_conversion = T, optimizer = "BFGS")
-do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 4, integer_conversion = T, optimizer = "BFGS")
+# do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 74, 59, "kaggle_daily", depth = 1, integer_conversion = T, optimizer = "BFGS")
 
-do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, optimizer = "BFGS", validation_size = 500)
-do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 4, integer_conversion = T, optimizer = "BFGS", validation_size = 500)
+# do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, optimizer = "BFGS")
+# do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 2, integer_conversion = T, optimizer = "BFGS")
+# do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 4, integer_conversion = T, optimizer = "BFGS")
+# do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 6, integer_conversion = T, significance = 0.001, optimizer = "BFGS")
 
-  
+# do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, optimizer = "BFGS", validation_size = 1000)
+# do_lstar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 4, integer_conversion = T, optimizer = "BFGS", validation_size = 1000)
+
+
+# Tourism Quarterly
+# do_lstar_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly", depth = 6, optimizer = "BFGS", significance = 0.001)
+
 
 
 

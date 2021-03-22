@@ -87,6 +87,17 @@ create_train_test_sets <- function(input_file_name, key, index, forecast_horizon
 }
 
 
+# Fitting a global regression model
+fit_global_model <- function(fitting_data, test_data = NULL) {
+  model <- glm(formula = create_formula(fitting_data), data = fitting_data)
+  
+  if(is.null(test_data))
+    global_predictions  <- model$fitted.values
+  else  
+    global_predictions <- predict.glm(object = model, newdata = as.data.frame(test_data))
+  
+  list("predictions" = global_predictions, "model" = model)
+}
 
 
 

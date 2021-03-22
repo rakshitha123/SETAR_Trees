@@ -52,11 +52,18 @@ calculate_errors <- function(forecasts, test_set, training_set, seasonality, fil
  
   write.table(smape_per_series, file.path(BASE_DIR, "results", "errors", paste0(file_name, "_smape_errors.txt")), row.names = F, col.names = F, quote = F)
   write.table(mase_vector, file.path(BASE_DIR, "results", "errors", paste0(file_name, "_mase_errors.txt")), row.names = F, col.names = F, quote = F)
-   
-  print(paste0("Mean SMAPE: ", mean(smape_per_series, na.rm = TRUE)))
-  print(paste0("Median SMAPE: ", median(smape_per_series, na.rm = TRUE)))
-  print(paste0("Mean MASE: ", mean(mase_vector, na.rm = TRUE)))
-  print(paste0("Median MASE: ", median(mase_vector, na.rm = TRUE)))
+  
+  mean_smape <- paste0("Mean SMAPE: ", mean(smape_per_series, na.rm = TRUE))
+  median_smape <- paste0("Median SMAPE: ", median(smape_per_series, na.rm = TRUE))
+  mean_mase <- paste0("Mean MASE: ", mean(mase_vector, na.rm = TRUE))
+  median_mase <- paste0("Median MASE: ", median(mase_vector, na.rm = TRUE))
+  
+  print(mean_smape)
+  print(median_smape)
+  print(mean_mase)
+  print(median_mase)
+  
+  write(c(mean_smape, median_smape, mean_mase, median_mase, "\n"), file = file.path(BASE_DIR, "results", "errors", paste0(file_name, ".txt")), append = FALSE)
 }
 
 

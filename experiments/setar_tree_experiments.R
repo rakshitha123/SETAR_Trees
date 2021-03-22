@@ -1,83 +1,23 @@
 BASE_DIR <- "C:/Projects/Trees/"
-DATASET_DIR <- "C:/Projects/TSForecasting/"
 
-source(file.path(DATASET_DIR, "utils", "data_loader.R", fsep = "/"))
-source(file.path(BASE_DIR, "utils", "global_model_helper.R", fsep = "/"))
-source(file.path(BASE_DIR, "utils", "error_calculator.R", fsep = "/"))
-
-set.seed(1)
-
-LOW_FREQUENCIES <- c("4_seconds", "minutely", "10_minutes", "half_hourly", "hourly")
-HIGH_FREQUENCIES <- c("daily", "weekly", "monthly", "quarterly", "yearly")
-FREQUENCIES <- c(LOW_FREQUENCIES, HIGH_FREQUENCIES)
-
-VALUE_COL_NAME <- "series_value"
-
-# seasonality values corresponding with the frequencies: 4_seconds, minutely, 10_minutes, half_hourly, hourly, daily, weekly, monthly, quarterly and yearly
-# consider multiple seasonalities for frequencies less than daily
-SEASONALITY_VALS <- list()
-SEASONALITY_VALS[[1]] <- c(21600, 151200, 7889400)
-SEASONALITY_VALS[[2]] <- c(1440, 10080, 525960)
-SEASONALITY_VALS[[3]] <- c(144, 1008, 52596)
-SEASONALITY_VALS[[4]] <- c(48, 336, 17532)
-SEASONALITY_VALS[[5]] <- c(24, 168, 8766)
-SEASONALITY_VALS[[6]] <- 7
-SEASONALITY_VALS[[7]] <- 365.25/7
-SEASONALITY_VALS[[8]] <- 12 
-SEASONALITY_VALS[[9]] <- 4
-SEASONALITY_VALS[[10]] <- 1  
-
-SEASONALITY_MAP <- list()
-
-for(f in seq_along(FREQUENCIES))
-  SEASONALITY_MAP[[FREQUENCIES[f]]] <- SEASONALITY_VALS[[f]]
+source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 
 
-# For testing
-# input_file_name <- "nn5_daily_dataset_without_missing_values.ts"
+# input_file_name <- "chaotic_logistic_dataset.ts"
 # lag <- 10
 # key <- "series_name"
-# index <- "start_timestamp"
-# forecast_horizon <- 56
-# dataset_name = "nn5_daily"
-# interger_conversion = F
-# threshold_function = "median"
-# depth = 3
+# index <- NULL
+# forecast_horizon <- 8
+# dataset_name = "chaotic_logistic"
+# integer_conversion = F
+# depth = 4
+# significance = 0.001
 
 
-create_split <- function(data, conditional_lag, threshold_function = "median"){
-  threshold <- eval(parse(text = paste0(threshold_function, "(data[['Lag", conditional_lag, "']])")))
+create_split <- function(data, conditional_lag, threshold){
   left_node <- data[data[[paste0("Lag", conditional_lag)]] < threshold,]
   right_node <- data[data[[paste0("Lag", conditional_lag)]] >= threshold,]
   list("left_node" = left_node, "right_node" = right_node)
-}
-
-
-optimise_split <- function(data, lag, threshold_function = "median"){
-  all_node_errors <- NULL
-  for(i in 1:lag){
-    nodes <- create_split(data, i, threshold_function)
-    
-    nodes_errors <- NULL
-    
-    for(n in 1:length(nodes)){
-      current_node <- nodes[[n]]
-      current_fitted_values <- as.numeric(fit_global_model(current_node)[["predictions"]])
-      current_errors <- abs(current_node$y - current_fitted_values)
-      nodes_errors <- c(nodes_errors, current_errors)
-    }
-    
-    all_node_errors <- c(all_node_errors, mean(nodes_errors))
-  }
-  
-  which(all_node_errors == min(all_node_errors))
-}
-
-
-fit_global_model <- function(fitting_data) {
-  model <- glm(formula = create_formula(fitting_data), data = fitting_data)
-  global_predictions  <- predict.glm(object = model, newdata = as.data.frame(fitting_data[-1]))
-  list("predictions" = global_predictions, "model" = model)
 }
 
 
@@ -93,25 +33,49 @@ tree_traverse <- function(instance, split, threshold){
 
 get_leaf_index <- function(instance, splits, thresholds){
   current_split <- 1
+  divide_factor <- 2
   
   for(sp in 1:length(splits)){
     
-    direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split])
-    
-    divide_factor <- 2
-    next_possible_splits <- tail(1: (current_split*divide_factor), divide_factor)
-    
-    if(direction == "left"){
-      current_split <- next_possible_splits[1]
+    if(length(which(splits[[sp]] == 0)) > 0){
+      zeros <- which(splits[[sp]] == 0)
+      
+      change_count <- 0
+      
+      for(d in 1:length(zeros)){
+        if(zeros[d] < current_split){
+          change_count <- change_count + 1
+        }
+      }
+      
+      next_possible_splits <- tail(1: (current_split*divide_factor), divide_factor)
+      next_possible_splits <- next_possible_splits - change_count
+      
+      if(splits[[sp]][current_split] == 0){
+        current_split <- next_possible_splits[1]
+      }else{
+        direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split])
+        
+        if(direction == "left")
+          current_split <- next_possible_splits[1]
+        else
+          current_split <- next_possible_splits[2]
+      }
     }else{
-      current_split <- next_possible_splits[2]
+      direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split])
+      next_possible_splits <- tail(1: (current_split*divide_factor), divide_factor)
+      
+      if(direction == "left")
+        current_split <- next_possible_splits[1]
+      else
+        current_split <- next_possible_splits[2]
     }
   }
   current_split
 }
 
 
-do_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", threshold_function = "median", interger_conversion = F){
+do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05){
   
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon)
   training_set <- loaded_data[[1]]
@@ -123,334 +87,201 @@ do_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name,
   final_lags <- result[[2]]
   # series_means <- result[[3]]
   
+  
+  # Start timestamp
+  start_time <- Sys.time()
+  
+  
+  initial_predictions <- fit_global_model(embedded_series)$predictions
+  initial_error <- sum((embedded_series$y - initial_predictions)^2)
+  
+  # Set list of defaults:
+  start.con <- list(nTh = 15)
+  
+  
   tree <- list()
-  splits <- list()
+  th_lags <- list()
   thresholds <- list()
+  level_errors <- NULL
   
   node_data <- list(embedded_series)
     
   for(d in 1:depth){
     print(paste0("Depth: ", d))
-    level_optimal_splits <- NULL
+    level_th_lags <- NULL
     level_thresholds <- NULL
     level_nodes <- list()
     
     for(n in 1:length(node_data)){
-      optimal_split <- optimise_split(node_data[[n]], lag, threshold_function)
-      level_optimal_splits <- c(level_optimal_splits, optimal_split)
+      print(n)
       
-      threshold <- eval(parse(text = paste0(threshold_function, "(node_data[[n]][['Lag", optimal_split, "']])")))
-      level_thresholds <- c(level_thresholds, threshold)
+      best_cost <- Inf
+      th <- NULL
+      th_lag <- NULL
+      is_splitted <- FALSE
       
-      splited_nodes <- create_split(node_data[[n]], optimal_split, threshold_function)
       
-      for(s in 1:length(splited_nodes)){
+      if(nrow(node_data[[n]]) > 1){
+        for(lg in 1:lag){
+          print(lg)
+          ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
+          
+          for(ids in 1:length(ths)){
+            splitted_nodes <- create_split(node_data[[n]], lg, ths[ids])
+            left <- splitted_nodes$left_node
+            right <-  splitted_nodes$right_node 
+            
+            if(nrow(left) > 0 & nrow(right) > 0){
+              is_splitted <- TRUE
+              residuals_l <- left$y - fit_global_model(left)$predictions
+              residuals_r <- right$y - fit_global_model(right)$predictions
+              current_residuals <- c(residuals_l, residuals_r)
+              
+              cost <-  sum(current_residuals ^ 2) # sum of squares of residuals
+              
+              if(cost <= best_cost) { # find gamma and th which minimize the squared errors
+                best_cost <- cost;
+                th <- ths[ids]
+                th_lag <- lg
+              }
+            }
+          }
+        }
+        
+        # print(th)
+        # print(th_lag)
+        
+        if(is_splitted){
+          level_th_lags <- c(level_th_lags, th_lag)
+          level_thresholds <- c(level_thresholds, th)
+          
+          splited_nodes <- create_split(node_data[[n]], th_lag, th)
+          
+          for(s in 1:length(splited_nodes)){
+            len <- length(level_nodes)
+            level_nodes[[len + 1]] <- splited_nodes[[s]]
+          }
+        }else{
+          level_th_lags <- c(level_th_lags, 0)
+          level_thresholds <- c(level_thresholds, 0)
+          
+          len <- length(level_nodes)
+          level_nodes[[len + 1]] <- node_data[[n]]
+        }
+      }else{
+        level_th_lags <- c(level_th_lags, 0)
+        level_thresholds <- c(level_thresholds, 0)
+        
         len <- length(level_nodes)
-        level_nodes[[len + 1]] <- splited_nodes[[s]]
+        level_nodes[[len + 1]] <- node_data[[n]]
       }
     }
     
-    splits[[d]] <- level_optimal_splits
-    thresholds[[d]] <-level_thresholds
-    tree[[d]] <- level_nodes
     
-    node_data <- tree[[d]]
+    # Linearity test
+    print("lin test")
+    train_residuals <- NULL
+    for(ln in 1:length(level_nodes)){
+      train_residuals <- c(train_residuals, (level_nodes[[ln]]$y - as.numeric(fit_global_model(level_nodes[[ln]])[["predictions"]]))) 
+    }
+    
+    ss1 <- sum(train_residuals ^ 2)
+    
+    
+    # Compute F-statistic. For details, see https://online.stat.psu.edu/stat501/lesson/6/6.2
+    if(d == 1)
+      ss0 <- initial_error
+    else
+      ss0 <- level_errors[d-1]
+    
+    
+    f_stat <- ((ss0 - ss1)/(lag+1))/(ss1/(nrow(embedded_series) - 2*lag - 2))
+    p_value <- pf(f_stat, lag+1, nrow(embedded_series) - 2*lag - 2, lower.tail = FALSE)
+    
+    
+    print(paste0("SS0 = ", ss0))
+    print(paste0("SS1 = ", ss1))
+    print(paste0("F-statistic = ", f_stat))
+    print(paste0("P-value = ", p_value))
+    
+    if(p_value < significance){
+      print(paste0("Linearity test is significant. Adding a new level to the tree..."))
+      tree[[d]] <- level_nodes
+      thresholds[[d]] <- level_thresholds
+      th_lags[[d]] <- level_th_lags
+      node_data <- tree[[d]]
+      level_errors[d] <- ss1
+    }else{
+      print(paste0("Linearity test is not significant. Stop training..."))
+      break
+    }
   }
   
-  leaf_nodes <- tree[[depth]]
-  leaf_trained_models <- list()
- 
-  for(ln in 1:length(leaf_nodes)){
-    leaf_trained_models[[ln]] <- fit_global_model(leaf_nodes[[ln]])[["model"]]
+  
+  # Check whether the tree has any nodes. If not, train a single pooled regression model
+  if(length(tree) > 0){
+    leaf_nodes <- tree[[length(tree)]]
+    leaf_trained_models <- list()
+    
+    
+    # Train a linear model per each leaf node
+    for(ln in 1:length(leaf_nodes)){
+      leaf_trained_models[[ln]] <- fit_global_model(leaf_nodes[[ln]])[["model"]] 
+    }
+  }else{
+    final_trained_model <- fit_global_model(embedded_series)[["model"]]
   }
   
+  
+  # Forecasting
   forecasts <- NULL
   
   for(h in 1:forecast_horizon){
     horizon_predictions <- NULL
     
-    for(f in 1:nrow(final_lags)){
-      leaf_index <- get_leaf_index(final_lags[f,], splits, thresholds)
-      horizon_predictions <- c(horizon_predictions, predict.glm(object = leaf_trained_models[[leaf_index]], newdata = as.data.frame(final_lags[f,]))) 
-    }
-    
-    forecasts <- cbind(forecasts, horizon_predictions)
-    
-    # Updating the test set for the next horizon
-    if(h < forecast_horizon){
-      final_lags <- final_lags[-lag]
-      
-      # Updating lags for the next horizon
-      final_lags <- cbind(horizon_predictions, final_lags)
-      colnames(final_lags)[1:lag] <- paste("Lag", 1:lag, sep="")
-      
-      final_lags <- as.data.frame(final_lags)
-    }
-  }
- 
-  if(interger_conversion)
-    forecasts <- round(forecasts)
-  
-  file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_threshold_", threshold_function)
-  
-  write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote=FALSE)
-  
-  print(splits)
-  print(thresholds)
-  
-  calculate_errors(forecasts, test_set, training_set, seasonality, file_name)
-}
-
-
-do_boosting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", threshold_function = "median", interger_conversion = F, iterations = 1){
-  
-  loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon)
-  training_set <- loaded_data[[1]]
-  test_set <- loaded_data[[2]]
-  seasonality <- loaded_data[[3]]
-  
-  result <- create_input_matrix(training_set, lag)
-  embedded_series <- result[[1]]
-  final_lags <- result[[2]]
-  # series_means <- result[[3]]
-  
-  original_y <- embedded_series$y
-  original_final_lags <- final_lags
-  
-  # Obtain main predictions
-  forecasts <- NULL
-  model <- fit_global_model(embedded_series)[["model"]]
-  
-  for(h in 1:forecast_horizon){
-    horizon_predictions <- predict.glm(object = model, newdata = as.data.frame(final_lags))
-    forecasts <- cbind(forecasts, horizon_predictions)
-    
-    # Updating the test set for the next horizon
-    if(h < forecast_horizon){
-      final_lags <- final_lags[-lag]
-      
-      # Updating lags for the next horizon
-      final_lags <- cbind(horizon_predictions, final_lags)
-      colnames(final_lags)[1:lag] <- paste("Lag", 1:lag, sep="")
-      
-      final_lags <- as.data.frame(final_lags)
-    }
-  }
-  
-  original_forecasts <- forecasts
-  
-  current_y <- embedded_series$y
- 
-  temp_predictions <- as.numeric(fit_global_model(embedded_series)[["predictions"]])
-  embedded_series$y <- embedded_series$y - temp_predictions
-  
-  print(paste0("Start training error: ", mean(abs(embedded_series$y))))
-    
-  
-  # Obtain residual predictions iteratively
-  for(bi in 1:iterations){
-    tree <- list()
-    splits <- list()
-    thresholds <- list()
-    
-    
-    node_data <- list(embedded_series)
-    
-    for(d in 1:depth){
-      print(paste0("Depth: ", d))
-      level_optimal_splits <- NULL
-      level_thresholds <- NULL
-      level_nodes <- list()
-      
-      for(n in 1:length(node_data)){
-        optimal_split <- optimise_split(node_data[[n]], lag, threshold_function)
-        level_optimal_splits <- c(level_optimal_splits, optimal_split)
-        
-        threshold <- eval(parse(text = paste0(threshold_function, "(node_data[[n]][['Lag", optimal_split, "']])")))
-        level_thresholds <- c(level_thresholds, threshold)
-        
-        splited_nodes <- create_split(node_data[[n]], optimal_split, threshold_function)
-        
-        for(s in 1:length(splited_nodes)){
-          len <- length(level_nodes)
-          level_nodes[[len + 1]] <- splited_nodes[[s]]
-        }
-      }
-      
-      splits[[d]] <- level_optimal_splits
-      thresholds[[d]] <-level_thresholds
-      tree[[d]] <- level_nodes
-      
-      node_data <- tree[[d]]
-    }
-    
-    leaf_nodes <- tree[[depth]]
-    leaf_trained_models <- list()
-    
-    for(ln in 1:length(leaf_nodes)){
-      leaf_trained_models[[ln]] <- fit_global_model(leaf_nodes[[ln]])[["model"]]
-    }
-    
-    
-    # Add code here for early stopping if required
-    for(es in 1:nrow(embedded_series)){
-      leaf_index <- get_leaf_index(embedded_series[es,-1], splits, thresholds)
-      leaf_predictions <- predict.glm(object = leaf_trained_models[[leaf_index]], newdata = as.data.frame(embedded_series[es,-1]))
-      current_y[es] <- current_y[es] + as.numeric(leaf_predictions)
-    }
-    
-    embedded_series$y <- original_y - current_y
-    print(paste0("Iteration ", bi, " error: ", mean(abs(embedded_series$y))))
-    
-    # Get residual predictions for final lags
-    current_final_lags <- original_final_lags
-    
-    for(h in 1:forecast_horizon){
-      horizon_predictions <- NULL
-      
-      for(f in 1:nrow(current_final_lags)){
-        leaf_index <- get_leaf_index(current_final_lags[f,], splits, thresholds)
-        horizon_predictions <- c(horizon_predictions, predict.glm(object = leaf_trained_models[[leaf_index]], newdata = as.data.frame(current_final_lags[f,]))) 
-      }
-      
-      forecasts[,h] <- forecasts[,h] + horizon_predictions
-      
-      # Updating the test set for the next horizon
-      if(h < forecast_horizon){
-        current_final_lags <- current_final_lags[-lag]
-        
-        # Updating lags for the next horizon
-        current_final_lags <- cbind(original_forecasts[,h], current_final_lags)
-        colnames(current_final_lags)[1:lag] <- paste("Lag", 1:lag, sep="")
-        
-        current_final_lags <- as.data.frame(current_final_lags)
-      }
-    }
-  }
-  
-  
-  if(interger_conversion)
-    forecasts <- round(forecasts)
-  
-  file_name <- paste0(dataset_name, "_boosting_lag_", lag, "_depth_", depth, "_threshold_", threshold_function, "_iterations_", iterations)
-  
-  write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote=FALSE)
-  
-  calculate_errors(forecasts, test_set, training_set, seasonality, file_name)
-}
-
-
-do_bagging <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", threshold_function = "median", interger_conversion = F, num_samples = 2){
-  
-  loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon)
-  training_set <- loaded_data[[1]]
-  test_set <- loaded_data[[2]]
-  seasonality <- loaded_data[[3]]
-  
-  result <- create_input_matrix(training_set, lag)
-  embedded_series <- result[[1]]
-  original_final_lags <- result[[2]]
-  # series_means <- result[[3]]
-  
-  instance_index_list <- list()
-  
-  for(s in 1:num_samples){
-    instance_index_list[[s]] <- sample(1:nrow(embedded_series), ceiling(nrow(embedded_series)/2))
-  }
-  
-  forecasts_list <- list()
-  
-  for(sp in 1:num_samples){
-    tree <- list()
-    splits <- list()
-    thresholds <- list()
-    
-    node_data <- list(embedded_series[instance_index_list[[sp]],])
-    
-    for(d in 1:depth){
-      print(paste0("Depth: ", d))
-      level_optimal_splits <- NULL
-      level_thresholds <- NULL
-      level_nodes <- list()
-      
-      for(n in 1:length(node_data)){
-        optimal_split <- optimise_split(node_data[[n]], lag, threshold_function)
-        level_optimal_splits <- c(level_optimal_splits, optimal_split)
-        
-        threshold <- eval(parse(text = paste0(threshold_function, "(node_data[[n]][['Lag", optimal_split, "']])")))
-        level_thresholds <- c(level_thresholds, threshold)
-        
-        splited_nodes <- create_split(node_data[[n]], optimal_split, threshold_function)
-        
-        for(s in 1:length(splited_nodes)){
-          len <- length(level_nodes)
-          level_nodes[[len + 1]] <- splited_nodes[[s]]
-        }
-      }
-      
-      splits[[d]] <- level_optimal_splits
-      thresholds[[d]] <-level_thresholds
-      tree[[d]] <- level_nodes
-      
-      node_data <- tree[[d]]
-    }
-    
-    leaf_nodes <- tree[[depth]]
-    leaf_trained_models <- list()
-    
-    for(ln in 1:length(leaf_nodes)){
-      leaf_trained_models[[ln]] <- fit_global_model(leaf_nodes[[ln]])[["model"]]
-    }
-    
-    iter_forecasts <- NULL
-    final_lags <- original_final_lags
-    
-    for(h in 1:forecast_horizon){
-      horizon_predictions <- NULL
-      
+    if(length(tree) > 0){
       for(f in 1:nrow(final_lags)){
-        leaf_index <- get_leaf_index(final_lags[f,], splits, thresholds)
+        leaf_index <- get_leaf_index(final_lags[f,], th_lags, thresholds)
         horizon_predictions <- c(horizon_predictions, predict.glm(object = leaf_trained_models[[leaf_index]], newdata = as.data.frame(final_lags[f,]))) 
       }
-      
-      iter_forecasts <- cbind(iter_forecasts, horizon_predictions)
-      
-      # Updating the test set for the next horizon
-      if(h < forecast_horizon){
-        final_lags <- final_lags[-lag]
-        
-        # Updating lags for the next horizon
-        final_lags <- cbind(horizon_predictions, final_lags)
-        colnames(final_lags)[1:lag] <- paste("Lag", 1:lag, sep="")
-        
-        final_lags <- as.data.frame(final_lags)
-      }
+    }else{
+      horizon_predictions <- predict.glm(object = final_trained_model, newdata = as.data.frame(final_lags))
     }
     
-    print(iter_forecasts)
-    forecasts_list[[sp]] <- iter_forecasts
-  }
-  
-  forecasts <- matrix(NA, nrow = nrow(original_final_lags), ncol = forecast_horizon)
-  
-  for(r in 1:nrow(original_final_lags)){
-    row_forecasts <- as.numeric(forecasts_list[[1]][r,])
     
-    for(s in 2:num_samples){
-      row_forecasts <- row_forecasts + as.numeric(forecasts_list[[s]][r,])
+    forecasts <- cbind(forecasts, horizon_predictions)
+    
+    # Updating the test set for the next horizon
+    if(h < forecast_horizon){
+      final_lags <- final_lags[-lag]
+      
+      # Updating lags for the next horizon
+      final_lags <- cbind(horizon_predictions, final_lags)
+      colnames(final_lags)[1:lag] <- paste("Lag", 1:lag, sep="")
+      
+      final_lags <- as.data.frame(final_lags)
     }
-    
-    row_forecasts <- row_forecasts/num_samples
-    forecasts[r,] <- row_forecasts
   }
   
   
-  if(interger_conversion)
+  # Finish timestamp
+  end_time <- Sys.time()
+  
+ 
+  if(integer_conversion)
     forecasts <- round(forecasts)
   
-  file_name <- paste0(dataset_name, "_bagging_lag_", lag, "_depth_", depth, "_threshold_", threshold_function, "_samples_", num_samples)
+  file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_setar")
   
-  write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote=FALSE)
+  write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", "setar", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
+  
+  print(th_lags)
+  print(thresholds)
+  
+  # Execution time
+  exec_time <- end_time - start_time
+  print(exec_time)
+  write(paste(exec_time, attr(exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", paste0(file_name, ".txt"), fsep = "/"), append = FALSE)
   
   calculate_errors(forecasts, test_set, training_set, seasonality, file_name)
 }
@@ -458,81 +289,43 @@ do_bagging <- function(input_file_name, lag, forecast_horizon, dataset_name, dep
 
 # Experiments
 
+# Chaotic Logistic
+# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 4, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 5, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 6, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 7, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 8, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 9, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 10, index = NULL, significance = 0.001)
+
+
+# Mackey glass
+# do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, significance = 0.001)
+# do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 4, index = NULL, significance = 0.001)
+# do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 6, index = NULL, significance = 0.001)
+# do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 10, index = NULL, significance = 0.001)
+
+
 # NN5 Daily
-do_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 3)
-do_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 3, threshold_function = "mean")
-do_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 4)
-do_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 4, threshold_function = "mean")
-do_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 5)
-
-do_boosting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 3, iterations = 1)
-do_boosting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 3, iterations = 2)
-do_boosting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 4, iterations = 1)
-
-do_bagging("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 3, num_samples = 2)
-do_bagging("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 3, num_samples = 3)
-do_bagging("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 3, num_samples = 4)
-do_bagging("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 4, num_samples = 2)
-do_bagging("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 4, num_samples = 4)
-
-
-# Ausgrid Weekly
-do_forecasting("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 3)
-do_forecasting("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 4)
-
-do_boosting("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 3, iterations = 1)
-do_boosting("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 3, iterations = 2)
-
-do_bagging("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 3, num_samples = 2)
-do_bagging("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 3, num_samples = 3)
-do_bagging("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 3, num_samples = 4)
-do_bagging("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 4, num_samples = 2)
-do_bagging("ausgrid_weekly_dataset.ts", 52, 8, "ausgrid_weekly", depth = 4, num_samples = 4)
-
-
-# M4 Weekly 
-do_forecasting("m4_weekly_dataset.ts", 52, 13, "m4_weekly", depth = 3)
-do_bagging("m4_weekly_dataset.ts", 52, 13, "m4_weekly", depth = 3, num_samples = 2)
-do_bagging("m4_weekly_dataset.ts", 52, 13, "m4_weekly", depth = 3, num_samples = 3)
-
-
+# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, significance = 0.001)
+# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 4, significance = 0.001)
+# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 6, significance = 0.001)
+# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 10, significance = 0.001)
+do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 6, significance = 0.001)
 
 
 # Kaggle Daily
-# do_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 74, 59, "kaggle_daily", depth = 3, interger_conversion = T)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 4, integer_conversion = T, significance = 0.001)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 6, integer_conversion = T, significance = 0.001)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 74, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
 
 
-# M3 Monthly
-# do_forecasting("m3_monthly_dataset.ts", 23, 18, "m3_monthly", depth = 3)
-# do_forecasting("m3_monthly_dataset.ts", 23, 18, "m3_monthly", depth = 3, threshold_function = "mean")
-# do_forecasting("m3_monthly_dataset.ts", 23, 18, "m3_monthly", depth = 4)
-# do_forecasting("m3_monthly_dataset.ts", 23, 18, "m3_monthly", depth = 5)
-# 
-# do_forecasting("m3_monthly_demo_dataset.ts", 23, 18, "m3_monthly_demo", depth = 3, index = NULL)
-# do_forecasting("m3_monthly_micro_dataset.ts", 23, 18, "m3_monthly_micro", depth = 3, index = NULL)
-# do_forecasting("m3_monthly_macro_dataset.ts", 23, 18, "m3_monthly_macro", depth = 3, index = NULL)
-# do_forecasting("m3_monthly_industry_dataset.ts", 23, 18, "m3_monthly_industry", depth = 3, index = NULL)
-# do_forecasting("m3_monthly_finance_dataset.ts", 23, 18, "m3_monthly_finance", depth = 3, index = NULL)
-# do_forecasting("m3_monthly_other_dataset.ts", 23, 18, "m3_monthly_other", depth = 3, index = NULL)
-# 
-# do_bagging("m3_monthly_demo_dataset.ts", 23, 18, "m3_monthly_demo", depth = 3, index = NULL, num_samples = 2)
-# do_bagging("m3_monthly_micro_dataset.ts", 23, 18, "m3_monthly_micro", depth = 3, index = NULL, num_samples = 2)
-# do_bagging("m3_monthly_macro_dataset.ts", 23, 18, "m3_monthly_macro", depth = 3, index = NULL, num_samples = 2)
-# do_bagging("m3_monthly_industry_dataset.ts", 23, 18, "m3_monthly_industry", depth = 3, index = NULL, num_samples = 2)
-# do_bagging("m3_monthly_finance_dataset.ts", 23, 18, "m3_monthly_finance", depth = 3, index = NULL, num_samples = 2)
-# do_bagging("m3_monthly_other_dataset.ts", 23, 18, "m3_monthly_other", depth = 3, index = NULL, num_samples = 2)
-# 
-# aggregate_sub_dataset_errors(c("m3_monthly_demo_bagging_lag_23_depth_3_threshold_median_samples_2_smape_errors",
-#                                "m3_monthly_micro_bagging_lag_23_depth_3_threshold_median_samples_2_smape_errors",
-#                                "m3_monthly_macro_bagging_lag_23_depth_3_threshold_median_samples_2_smape_errors",
-#                                "m3_monthly_finance_bagging_lag_23_depth_3_threshold_median_samples_2_smape_errors",
-#                                "m3_monthly_industry_bagging_lag_23_depth_3_threshold_median_samples_2_smape_errors",
-#                                "m3_monthly_other_bagging_lag_23_depth_3_threshold_median_samples_2_smape_errors"))
-# 
-# aggregate_sub_dataset_errors(c("m3_monthly_demo_bagging_lag_23_depth_3_threshold_median_samples_2_mase_errors",
-#                                "m3_monthly_micro_bagging_lag_23_depth_3_threshold_median_samples_2_mase_errors",
-#                                "m3_monthly_macro_bagging_lag_23_depth_3_threshold_median_samples_2_mase_errors",
-#                                "m3_monthly_finance_bagging_lag_23_depth_3_threshold_median_samples_2_mase_errors",
-#                                "m3_monthly_industry_bagging_lag_23_depth_3_threshold_median_samples_2_mase_errors",
-#                                "m3_monthly_other_bagging_lag_23_depth_3_threshold_median_samples_2_mase_errors"))
+# Tourism Quarterly
+# do_setar_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly", depth = 1, significance = 0.001)
+# do_setar_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly", depth = 6, significance = 0.001)
+
+
+
 
