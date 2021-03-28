@@ -1,3 +1,5 @@
+library(rgenoud)
+
 BASE_DIR <- "C:/Projects/Trees/"
 
 source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
@@ -10,7 +12,7 @@ source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 # forecast_horizon <- 8
 # dataset_name = "chaotic_logistic"
 # integer_conversion = F
-# depth = 4
+# depth = 1
 # significance = 0.001
 
 
@@ -75,7 +77,27 @@ get_leaf_index <- function(instance, splits, thresholds){
 }
 
 
-do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05){
+# Sum of squares function
+SS <- function(p, train_data, current_lg) {
+  splitted_nodes <- create_split(train_data, current_lg, p)
+  
+  left <- splitted_nodes$left_node
+  right <-  splitted_nodes$right_node 
+  
+  if(nrow(left) > 0 & nrow(right) > 0){
+    residuals_l <- left$y - fit_global_model(left)$predictions
+    residuals_r <- right$y - fit_global_model(right)$predictions
+    current_residuals <- c(residuals_l, residuals_r)
+    cost <-  sum(current_residuals ^ 2)
+  }else{
+    cost <- Inf
+  }
+  
+  cost
+}
+
+
+do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05, tune_method = "grid_search"){
   
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon)
   training_set <- loaded_data[[1]]
@@ -118,32 +140,34 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
       best_cost <- Inf
       th <- NULL
       th_lag <- NULL
-      is_splitted <- FALSE
       
       
       if(nrow(node_data[[n]]) > 1){
         for(lg in 1:lag){
-          print(lg)
-          ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
+          print(paste0("Lag ", lg))
           
-          for(ids in 1:length(ths)){
-            splitted_nodes <- create_split(node_data[[n]], lg, ths[ids])
-            left <- splitted_nodes$left_node
-            right <-  splitted_nodes$right_node 
+          if(tune_method == "grid_search"){
+            # print("Start hyperparameter tuning with grid search")
+            ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
             
-            if(nrow(left) > 0 & nrow(right) > 0){
-              is_splitted <- TRUE
-              residuals_l <- left$y - fit_global_model(left)$predictions
-              residuals_r <- right$y - fit_global_model(right)$predictions
-              current_residuals <- c(residuals_l, residuals_r)
+            for(ids in 1:length(ths)){
+              cost <- SS(ths[ids], node_data[[n]], lg)
               
-              cost <-  sum(current_residuals ^ 2) # sum of squares of residuals
-              
-              if(cost <= best_cost) { # find gamma and th which minimize the squared errors
+              if(cost <= best_cost) { # find th which minimizes the squared errors
                 best_cost <- cost;
                 th <- ths[ids]
                 th_lag <- lg
               }
+            }
+          }else if(tune_method == "genoud"){ #round(nrow(node_data[[n]]/5))
+            print("Start hyperparameter tuning with genoud")
+            optimised_lg_values <- genoud(SS, nvars = 1, max = F, pop.size = 1000, max.generations = 6, wait.generations = 2, Domains = matrix(c(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1])), nrow = 1, ncol = 2), train_data = node_data[[n]], current_lg = lg) 
+            cost <- optimised_lg_values$value
+            
+            if(cost <= best_cost) { # find th which minimizes the squared errors
+              best_cost <- cost;
+              th <- optimised_lg_values$par
+              th_lag <- lg
             }
           }
         }
@@ -151,7 +175,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
         # print(th)
         # print(th_lag)
         
-        if(is_splitted){
+        if(best_cost != Inf){
           level_th_lags <- c(level_th_lags, th_lag)
           level_thresholds <- c(level_thresholds, th)
           
@@ -271,7 +295,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   if(integer_conversion)
     forecasts <- round(forecasts)
   
-  file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_setar")
+  file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_setar_", tune_method)
   
   write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", "setar", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
   
@@ -299,6 +323,9 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
 # do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 9, index = NULL, significance = 0.001)
 # do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 10, index = NULL, significance = 0.001)
 
+#do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, significance = 0.001, tune_method = "genoud")
+do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 6, index = NULL, significance = 0.001, tune_method = "genoud")
+
 
 # Mackey glass
 # do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, significance = 0.001)
@@ -312,7 +339,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
 # do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 4, significance = 0.001)
 # do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 6, significance = 0.001)
 # do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 10, significance = 0.001)
-do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 6, significance = 0.001)
+# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 6, significance = 0.001)
 
 
 # Kaggle Daily
