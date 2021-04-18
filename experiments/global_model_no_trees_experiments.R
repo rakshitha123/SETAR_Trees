@@ -1,9 +1,9 @@
-BASE_DIR <- "C:/Projects/Trees/"
+BASE_DIR <- "SETAR_Trees"
 
 source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 
 
-do_global_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, method_name = "pooled_regression", key = "series_name", index = "start_timestamp", interger_conversion = F){
+do_global_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, method_name = "pooled_regression", key = "series_name", index = "start_timestamp", integer_conversion = F, scale = FALSE){
   
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon)
   training_set <- loaded_data[[1]]
@@ -13,15 +13,18 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
   # Start timestamp
   start_time <- Sys.time()
   
-  forecasts <- start_forecasting(training_set, lag, forecast_horizon, method_name)
+  forecasts <- start_forecasting(training_set, lag, forecast_horizon, method_name, scale)
   
   # Finish timestamp
   end_time <- Sys.time()
   
-  if(interger_conversion)
+  if(integer_conversion)
     forecasts <- round(forecasts)
   
-  file_name <- paste0(dataset_name, "_lag_", method_name)
+  file_name <- paste0(dataset_name, "_lag_", lag, "_", method_name)
+  
+  if(scale)
+    file_name <- paste0(file_name, "_with_scaling")
   
   write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote=FALSE)
 
@@ -33,28 +36,40 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
   write(paste(exec_time, attr(exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", paste0(file_name, ".txt"), fsep = "/"), append = FALSE)
 }
 
-do_global_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily")
-do_global_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", index = NULL)
-do_global_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", index = NULL)
-do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", interger_conversion = T)
-do_global_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly")
 
-do_global_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", method_name = "catboost")
-do_global_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", index = NULL, method_name = "catboost")
-do_global_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", index = NULL, method_name = "catboost")
-do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", interger_conversion = T, method_name = "catboost")
-do_global_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly", method_name = "catboost")
+do_global_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL)
+do_global_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL)
+do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T)
+do_global_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly")
+do_global_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T)
 
-do_global_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", method_name = "lightgbm")
-do_global_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", index = NULL, method_name = "lightgbm")
-do_global_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", index = NULL, method_name = "lightgbm")
-do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", interger_conversion = T, method_name = "lightgbm")
-do_global_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly", method_name = "lightgbm")
+do_global_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, method_name = "catboost")
+do_global_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, method_name = "catboost")
+do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, method_name = "catboost")
+do_global_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", method_name = "catboost")
+do_global_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", method_name = "catboost", integer_conversion = T)
 
-do_global_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", method_name = "xgboost")
-do_global_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", index = NULL, method_name = "xgboost")
-do_global_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", index = NULL, method_name = "xgboost")
-do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", interger_conversion = T, method_name = "xgboost")
-do_global_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly", method_name = "xgboost")
+do_global_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, method_name = "lightgbm")
+do_global_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, method_name = "lightgbm")
+do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, method_name = "lightgbm")
+do_global_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", method_name = "lightgbm")
+do_global_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", method_name = "lightgbm", integer_conversion = T)
 
+do_global_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, method_name = "xgboost")
+do_global_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, method_name = "xgboost")
+do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, method_name = "xgboost")
+do_global_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", method_name = "xgboost")
+do_global_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", method_name = "xgboost", integer_conversion = T)
+
+do_global_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, method_name = "ffnn")
+do_global_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, method_name = "ffnn")
+do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, method_name = "ffnn")
+do_global_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", method_name = "ffnn")
+do_global_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", method_name = "ffnn", integer_conversion = T)
+
+do_global_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, method_name = "rf")
+do_global_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, method_name = "rf")
+do_global_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, method_name = "rf")
+do_global_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", method_name = "rf")
+do_global_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", method_name = "rf", integer_conversion = T)
 

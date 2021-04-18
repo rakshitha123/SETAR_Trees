@@ -1,19 +1,21 @@
 # Creating embedded matrix and final lags to train the global models
-create_input_matrix <- function(dataset, lag){
+create_input_matrix <- function(dataset, lag, scale = FALSE){
   embedded_series <- NULL
   final_lags <- NULL
-  # series_means <- NULL
+  series_means <- NULL
   
   for (i in 1:length(dataset)) {
     time_series <- as.numeric(unlist(dataset[i], use.names = FALSE))
     
-    # mean <- mean(time_series)
+    mean <- mean(time_series)
     
-    # if(mean != 0){
-    #   series_means <- c(series_means, mean)
-    #   time_series <- time_series / mean
-    # }else
-    #   series_means <- c(series_means, 1)
+    if(mean != 0){
+      series_means <- c(series_means, mean)
+      
+      if(scale)
+        time_series <- time_series / mean
+    }else
+      series_means <- c(series_means, 1)
     
     # Embed the series
     embedded <- embed(time_series, lag + 1)
@@ -39,7 +41,7 @@ create_input_matrix <- function(dataset, lag){
   final_lags <- as.data.frame(final_lags)
   colnames(final_lags)[1:lag] <- paste("Lag", 1:lag, sep = "")
   
-  list(embedded_series, final_lags)  #series_means
+  list(embedded_series, final_lags, series_means) 
 }
 
 
@@ -60,7 +62,7 @@ create_formula <- function(data){
 
 # Creating training and test sets
 create_train_test_sets <- function(input_file_name, key, index, forecast_horizon){
-  loaded_data <- convert_ts_to_tsibble(file.path(DATASET_DIR, "ts_data", input_file_name, fsep = "/"), VALUE_COL_NAME, key, index)
+  loaded_data <- convert_tsf_to_tsibble(file.path(DATASET_DIR, "tsf_data", input_file_name, fsep = "/"), VALUE_COL_NAME, key, index)
   dataset <- loaded_data[[1]]
   frequency <- loaded_data[[2]]
   

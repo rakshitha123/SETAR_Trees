@@ -1,19 +1,6 @@
-library(rgenoud)
-
-BASE_DIR <- "C:/Projects/Trees/"
+BASE_DIR <- "SETAR_Trees"
 
 source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
-
-
-# input_file_name <- "chaotic_logistic_dataset.ts"
-# lag <- 10
-# key <- "series_name"
-# index <- NULL
-# forecast_horizon <- 8
-# dataset_name = "chaotic_logistic"
-# integer_conversion = F
-# depth = 1
-# significance = 0.001
 
 
 create_split <- function(data, conditional_lag, threshold){
@@ -97,25 +84,83 @@ SS <- function(p, train_data, current_lg) {
 }
 
 
-do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05, tune_method = "grid_search"){
+check_linearity <- function(parent_node, child_nodes, lag, significance){
+  print("lin test")
+  
+  is_significant <- TRUE
+  
+  ss0 <- sum((parent_node$y - as.numeric(fit_global_model(parent_node)[["predictions"]])) ^2) 
+    
+  if(ss0 == 0){
+    is_significant <- FALSE
+  }else{
+    train_residuals <- NULL
+    for(ln in 1:length(child_nodes)){
+      train_residuals <- c(train_residuals, (child_nodes[[ln]]$y - as.numeric(fit_global_model(child_nodes[[ln]])[["predictions"]]))) 
+    }
+    
+    ss1 <- sum(train_residuals ^ 2)
+    
+    
+    # Compute F-statistic. For details, see https://online.stat.psu.edu/stat501/lesson/6/6.2
+    f_stat <- ((ss0 - ss1)/(lag+1))/(ss1/(nrow(parent_node) - 2*lag - 2))
+    p_value <- pf(f_stat, lag+1, nrow(parent_node) - 2*lag - 2, lower.tail = FALSE)
+    
+    if(p_value > significance)
+      is_significant <- FALSE
+    
+    print(paste0("P-value = ", p_value, " Significant ", is_significant))
+  }
+  
+  is_significant
+}
+
+
+check_error_improvement <- function(parent_node, child_nodes, error_threshold){
+  print("error improvement")
+  
+  is_improved <- TRUE
+  
+  ss0 <- sum((parent_node$y - as.numeric(fit_global_model(parent_node)[["predictions"]])) ^2) 
+  
+  if(ss0 == 0){
+    is_improved <- FALSE
+  }else{
+    train_residuals <- NULL
+    for(ln in 1:length(child_nodes)){
+      train_residuals <- c(train_residuals, (child_nodes[[ln]]$y - as.numeric(fit_global_model(child_nodes[[ln]])[["predictions"]]))) 
+    }
+    
+    ss1 <- sum(train_residuals ^ 2)
+    
+    improvement <- (ss0-ss1)/ss0
+    
+    if(improvement < error_threshold)
+      is_improved <- FALSE
+    
+    print(paste0("Error improvement = ", improvement, " Enough improvement ", is_improved))
+  }
+  
+  is_improved
+}
+
+
+do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05, scale = FALSE, seq_significance = TRUE, significance_divider = 2, error_threshold = 0.03, stopping_criteria = "both", fixed_lag = FALSE, external_lag = 0){
   
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon)
   training_set <- loaded_data[[1]]
   test_set <- loaded_data[[2]]
   seasonality <- loaded_data[[3]]
   
-  result <- create_input_matrix(training_set, lag)
+  result <- create_input_matrix(training_set, lag, scale)
   embedded_series <- result[[1]]
   final_lags <- result[[2]]
-  # series_means <- result[[3]]
+  series_means <- result[[3]]
   
   
   # Start timestamp
   start_time <- Sys.time()
   
-  
-  initial_predictions <- fit_global_model(embedded_series)$predictions
-  initial_error <- sum((embedded_series$y - initial_predictions)^2)
   
   # Set list of defaults:
   start.con <- list(nTh = 15)
@@ -127,12 +172,16 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   level_errors <- NULL
   
   node_data <- list(embedded_series)
+  
+  split_info <- 1
     
   for(d in 1:depth){
     print(paste0("Depth: ", d))
     level_th_lags <- NULL
     level_thresholds <- NULL
     level_nodes <- list()
+    level_significant_node_count <- 0
+    level_split_info <- NULL
     
     for(n in 1:length(node_data)){
       print(n)
@@ -142,11 +191,29 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
       th_lag <- NULL
       
       
-      if(nrow(node_data[[n]]) > 1){
-        for(lg in 1:lag){
-          print(paste0("Lag ", lg))
+      if(nrow(node_data[[n]]) > (2*lag + 2) & split_info[n] == 1){ # When this condition is not satisfied, the F-statistic will be negative and model will become unidentifiable
+        
+        if(fixed_lag){
+          if(external_lag > 0)
+            lg <- external_lag
+          else
+            lg <- 1
           
-          if(tune_method == "grid_search"){
+          ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
+          
+          for(ids in 1:length(ths)){
+            cost <- SS(ths[ids], node_data[[n]], lg)
+            
+            if(cost <= best_cost) { # find th which minimizes the squared errors
+              best_cost <- cost;
+              th <- ths[ids]
+              th_lag <- lg
+            }
+          }
+        }else{
+          for(lg in 1:lag){
+            print(paste0("Lag ", lg))
+            
             # print("Start hyperparameter tuning with grid search")
             ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
             
@@ -159,35 +226,41 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
                 th_lag <- lg
               }
             }
-          }else if(tune_method == "genoud"){ #round(nrow(node_data[[n]]/5))
-            print("Start hyperparameter tuning with genoud")
-            optimised_lg_values <- genoud(SS, nvars = 1, max = F, pop.size = 1000, max.generations = 6, wait.generations = 2, Domains = matrix(c(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1])), nrow = 1, ncol = 2), train_data = node_data[[n]], current_lg = lg) 
-            cost <- optimised_lg_values$value
-            
-            if(cost <= best_cost) { # find th which minimizes the squared errors
-              best_cost <- cost;
-              th <- optimised_lg_values$par
-              th_lag <- lg
-            }
           }
         }
         
-        # print(th)
-        # print(th_lag)
-        
         if(best_cost != Inf){
-          level_th_lags <- c(level_th_lags, th_lag)
-          level_thresholds <- c(level_thresholds, th)
-          
           splited_nodes <- create_split(node_data[[n]], th_lag, th)
           
-          for(s in 1:length(splited_nodes)){
+          if(stopping_criteria == "lin_test")
+            is_significant <- check_linearity(node_data[[n]], splited_nodes, lag, significance)
+          else if(stopping_criteria == "error_imp")
+            is_significant <- check_error_improvement(node_data[[n]], splited_nodes, error_threshold)
+          else if(stopping_criteria == "both")
+            is_significant <- check_linearity(node_data[[n]], splited_nodes, lag, significance) & check_error_improvement(node_data[[n]], splited_nodes, error_threshold) 
+            
+          if(is_significant){
+            level_th_lags <- c(level_th_lags, th_lag)
+            level_thresholds <- c(level_thresholds, th)
+            level_split_info <- c(level_split_info, rep(1, 2))
+            level_significant_node_count <- level_significant_node_count + 1
+            
+            for(s in 1:length(splited_nodes)){
+              len <- length(level_nodes)
+              level_nodes[[len + 1]] <- splited_nodes[[s]]
+            }
+          }else{
+            level_th_lags <- c(level_th_lags, 0)
+            level_thresholds <- c(level_thresholds, 0)
+            level_split_info <- c(level_split_info, 0)
+            
             len <- length(level_nodes)
-            level_nodes[[len + 1]] <- splited_nodes[[s]]
+            level_nodes[[len + 1]] <- node_data[[n]]
           }
         }else{
           level_th_lags <- c(level_th_lags, 0)
           level_thresholds <- c(level_thresholds, 0)
+          level_split_info <- c(level_split_info, 0)
           
           len <- length(level_nodes)
           level_nodes[[len + 1]] <- node_data[[n]]
@@ -195,50 +268,24 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
       }else{
         level_th_lags <- c(level_th_lags, 0)
         level_thresholds <- c(level_thresholds, 0)
+        level_split_info <- c(level_split_info, 0)
         
         len <- length(level_nodes)
         level_nodes[[len + 1]] <- node_data[[n]]
       }
     }
     
-    
-    # Linearity test
-    print("lin test")
-    train_residuals <- NULL
-    for(ln in 1:length(level_nodes)){
-      train_residuals <- c(train_residuals, (level_nodes[[ln]]$y - as.numeric(fit_global_model(level_nodes[[ln]])[["predictions"]]))) 
-    }
-    
-    ss1 <- sum(train_residuals ^ 2)
-    
-    
-    # Compute F-statistic. For details, see https://online.stat.psu.edu/stat501/lesson/6/6.2
-    if(d == 1)
-      ss0 <- initial_error
-    else
-      ss0 <- level_errors[d-1]
-    
-    
-    f_stat <- ((ss0 - ss1)/(lag+1))/(ss1/(nrow(embedded_series) - 2*lag - 2))
-    p_value <- pf(f_stat, lag+1, nrow(embedded_series) - 2*lag - 2, lower.tail = FALSE)
-    
-    
-    print(paste0("SS0 = ", ss0))
-    print(paste0("SS1 = ", ss1))
-    print(paste0("F-statistic = ", f_stat))
-    print(paste0("P-value = ", p_value))
-    
-    if(p_value < significance){
-      print(paste0("Linearity test is significant. Adding a new level to the tree..."))
+    if(level_significant_node_count > 0){
       tree[[d]] <- level_nodes
       thresholds[[d]] <- level_thresholds
       th_lags[[d]] <- level_th_lags
       node_data <- tree[[d]]
-      level_errors[d] <- ss1
-    }else{
-      print(paste0("Linearity test is not significant. Stop training..."))
+      split_info <- level_split_info
+      
+      if(seq_significance)
+        significance <- significance/significance_divider
+    }else
       break
-    }
   }
   
   
@@ -246,16 +293,38 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   if(length(tree) > 0){
     leaf_nodes <- tree[[length(tree)]]
     leaf_trained_models <- list()
-    
-    
+    num_of_leaf_instances <- NULL
+      
     # Train a linear model per each leaf node
     for(ln in 1:length(leaf_nodes)){
       leaf_trained_models[[ln]] <- fit_global_model(leaf_nodes[[ln]])[["model"]] 
+      num_of_leaf_instances <- c(num_of_leaf_instances, nrow(leaf_nodes[[ln]]))
     }
   }else{
     final_trained_model <- fit_global_model(embedded_series)[["model"]]
   }
   
+  
+  file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_setar_", stopping_criteria)
+  
+  if(fixed_lag)
+    file_name <- paste0(file_name, "_fixed_lag")
+    
+  if(stopping_criteria != "lin_test")
+    file_name <- paste0(file_name, "_error_threshold_", error_threshold)
+  
+  if(seq_significance)
+    file_name <- paste0(file_name, "_seq_significance_", significance_divider)
+  
+  if(scale)
+    file_name <- paste0(file_name, "_with_scaling")
+  
+  
+  if(length(tree) > 0){
+    write(paste("No: of nodes in leaf level:", length(leaf_nodes)), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = T)
+    write(paste("Tree depth:", length(tree)), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = T)
+    write.table(num_of_leaf_instances, file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), row.names = F, col.names = F, quote = F, append = T)
+  } 
   
   # Forecasting
   forecasts <- NULL
@@ -271,8 +340,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     }else{
       horizon_predictions <- predict.glm(object = final_trained_model, newdata = as.data.frame(final_lags))
     }
-    
-    
+  
     forecasts <- cbind(forecasts, horizon_predictions)
     
     # Updating the test set for the next horizon
@@ -287,20 +355,25 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     }
   }
   
+  if(scale)
+    forecasts <- forecasts * as.vector(series_means)
+  
   
   # Finish timestamp
   end_time <- Sys.time()
-  
  
   if(integer_conversion)
     forecasts <- round(forecasts)
   
-  file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_setar_", tune_method)
-  
+ 
   write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", "setar", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
   
   print(th_lags)
   print(thresholds)
+  print(paste0("Executed for ", length(tree), " levels"))
+  
+  if(length(tree) > 1)
+    print(paste0("Insignificant node count = ", length(tree[[length(tree) - 1]]) - level_significant_node_count))
   
   # Execution time
   exec_time <- end_time - start_time
@@ -314,45 +387,18 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
 # Experiments
 
 # Chaotic Logistic
-# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 4, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 5, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 6, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 7, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 8, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 9, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 10, index = NULL, significance = 0.001)
-
-#do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 1, index = NULL, significance = 0.001, tune_method = "genoud")
-do_setar_forecasting("chaotic_logistic_dataset.ts", 10, 8, "chaotic_logistic", depth = 6, index = NULL, significance = 0.001, tune_method = "genoud")
-
+do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.03)
 
 # Mackey glass
-# do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 1, index = NULL, significance = 0.001)
-# do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 4, index = NULL, significance = 0.001)
-# do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 6, index = NULL, significance = 0.001)
-# do_setar_forecasting("mackey_glass_dataset.ts", 10, 8, "mackey_glass", depth = 10, index = NULL, significance = 0.001)
-
-
-# NN5 Daily
-# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 1, significance = 0.001)
-# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 4, significance = 0.001)
-# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 6, significance = 0.001)
-# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 10, 56, "nn5_daily", depth = 10, significance = 0.001)
-# do_setar_forecasting("nn5_daily_dataset_without_missing_values.ts", 70, 56, "nn5_daily", depth = 6, significance = 0.001)
-
-
-# Kaggle Daily
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 4, integer_conversion = T, significance = 0.001)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 10, 59, "kaggle_daily", depth = 6, integer_conversion = T, significance = 0.001)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 74, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
-
+do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.03)
 
 # Tourism Quarterly
-# do_setar_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly", depth = 1, significance = 0.001)
-# do_setar_forecasting("tourism_quarterly_dataset.ts", 10, 8, "tourism_quarterly", depth = 6, significance = 0.001)
+do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
 
+# Kaggle Daily
+do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
 
+# Rossmann
+do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
 
 

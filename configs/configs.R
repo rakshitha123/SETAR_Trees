@@ -1,5 +1,5 @@
-BASE_DIR <- "C:/Projects/Trees/"
-DATASET_DIR <- "C:/Projects/TSForecasting/"
+BASE_DIR <- "SETAR_Trees"
+DATASET_DIR <- "TSForecasting/"
 
 source(file.path(DATASET_DIR, "utils", "data_loader.R", fsep = "/"))
 source(file.path(BASE_DIR, "utils", "global_model_helper.R", fsep = "/"))

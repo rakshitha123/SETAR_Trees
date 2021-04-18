@@ -1,4 +1,4 @@
-BASE_DIR <- "C:/Projects/Trees/"
+BASE_DIR <- "SETAR_Trees"
 
 source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 
@@ -43,34 +43,27 @@ do_local_forecasting <- function(input_file_name, forecast_horizon, dataset_name
 }
 
 
-
 # Experiments
 
 # Chaotic Logistic
-do_local_forecasting("chaotic_logistic_dataset.ts", 8, "chaotic_logistic", "ses", index = NULL)
-do_local_forecasting("chaotic_logistic_dataset.ts", 8, "chaotic_logistic", "theta", index = NULL)
-do_local_forecasting("chaotic_logistic_dataset.ts", 8, "chaotic_logistic", "ets", index = NULL)
-do_local_forecasting("chaotic_logistic_dataset.ts", 8, "chaotic_logistic", "arima", index = NULL)
+do_local_forecasting("chaotic_logistic_dataset.tsf", 8, "chaotic_logistic", "ets", index = NULL)
+do_local_forecasting("chaotic_logistic_dataset.tsf", 8, "chaotic_logistic", "arima", index = NULL)
 
 # Mackey Glass
-do_local_forecasting("mackey_glass_dataset.ts", 8, "mackey_glass", "ses", index = NULL)
-do_local_forecasting("mackey_glass_dataset.ts", 8, "mackey_glass", "theta", index = NULL)
-do_local_forecasting("mackey_glass_dataset.ts", 8, "mackey_glass", "ets", index = NULL)
-do_local_forecasting("mackey_glass_dataset.ts", 8, "mackey_glass", "arima", index = NULL)
-
-# NN5 Daily
-do_local_forecasting("nn5_daily_dataset_without_missing_values.ts", 56, "nn5_daily", "ses")
-do_local_forecasting("nn5_daily_dataset_without_missing_values.ts", 56, "nn5_daily", "theta")
+do_local_forecasting("mackey_glass_dataset.tsf", 8, "mackey_glass", "ets", index = NULL)
+do_local_forecasting("mackey_glass_dataset.tsf", 8, "mackey_glass", "arima", index = NULL)
 
 # Kaggle Daily
-do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 59, "kaggle_daily", "ses", integer_conversion = T)
-do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.ts", 59, "kaggle_daily", "theta", integer_conversion = T)
+do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 59, "kaggle_daily", "ets", integer_conversion = TRUE)
+do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 59, "kaggle_daily", "arima", integer_conversion = TRUE)
 
 # Tourism Quarterly
-do_local_forecasting("tourism_quarterly_dataset.ts", 8, "tourism_quarterly", "ses")
-do_local_forecasting("tourism_quarterly_dataset.ts", 8, "tourism_quarterly", "theta")
-do_local_forecasting("tourism_quarterly_dataset.ts", 8, "tourism_quarterly", "ets")
-do_local_forecasting("tourism_quarterly_dataset.ts", 8, "tourism_quarterly", "arima")
+do_local_forecasting("tourism_quarterly_dataset.tsf", 8, "tourism_quarterly", "ets")
+do_local_forecasting("tourism_quarterly_dataset.tsf", 8, "tourism_quarterly", "arima")
+
+# Rossmann
+do_local_forecasting("rossmann_dataset_without_missing_values.tsf", 48, "rossmann", "ets", integer_conversion = TRUE)
+do_local_forecasting("rossmann_dataset_without_missing_values.tsf", 48, "rossmann", "arima", integer_conversion = TRUE)
 
 
 
