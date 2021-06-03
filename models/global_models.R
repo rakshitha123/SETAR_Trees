@@ -4,6 +4,7 @@ library(glmnet)
 library(catboost)
 library(nnet)
 library(lightgbm)
+library(xgboost)
 
 set.seed(1)
 

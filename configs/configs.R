@@ -1,8 +1,12 @@
-BASE_DIR <- "SETAR_Trees"
-DATASET_DIR <- "TSForecasting/"
+BASE_DIR <- "C:/Projects/SETAR_Trees/"
+DATASET_DIR <- "C:/Projects/TSForecasting/"
+
+# BASE_DIR <- "/home/rakshitha/Trees/"
+# DATASET_DIR <- "/home/rakshitha/TSForecasting/"
 
 source(file.path(DATASET_DIR, "utils", "data_loader.R", fsep = "/"))
 source(file.path(BASE_DIR, "utils", "global_model_helper.R", fsep = "/"))
+source(file.path(BASE_DIR, "utils", "tree_helper.R", fsep = "/"))
 source(file.path(BASE_DIR, "utils", "error_calculator.R", fsep = "/"))
 source(file.path(BASE_DIR, "models", "global_models.R", fsep = "/"))
 source(file.path(BASE_DIR, "models", "local_univariate_models.R", fsep = "/"))

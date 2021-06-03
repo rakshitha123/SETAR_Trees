@@ -38,7 +38,6 @@ calculate_mase <- function(forecasts, test_set, training_set, seasonality){
         mase_per_series[k] = MASE(as.numeric(test_set[k,]), as.numeric(forecasts[k,]), mean(abs(diff(as.numeric(unlist(training_set[k])), lag = 1, differences = 1))))        
   }
   
-  mase_per_series <- mase_per_series[!is.infinite(mase_per_series) & !is.na(mase_per_series)]
   mase_per_series
 }
 
