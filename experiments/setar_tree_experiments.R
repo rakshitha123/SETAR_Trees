@@ -1,148 +1,21 @@
-BASE_DIR <- "SETAR_Trees"
+# BASE_DIR <- "C:/Projects/SETAR_Trees/"
+BASE_DIR <- "/home/rakshitha/Trees/"
 
 source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 
 
-create_split <- function(data, conditional_lag, threshold){
-  left_node <- data[data[[paste0("Lag", conditional_lag)]] < threshold,]
-  right_node <- data[data[[paste0("Lag", conditional_lag)]] >= threshold,]
-  list("left_node" = left_node, "right_node" = right_node)
-}
-
-
-tree_traverse <- function(instance, split, threshold){
-  direction <- "left"
-  
-  if(instance[[paste0("Lag", split)]] >= threshold)
-    direction <- "right"
-  
-  direction
-}
-
-
-get_leaf_index <- function(instance, splits, thresholds){
-  current_split <- 1
-  divide_factor <- 2
-  
-  for(sp in 1:length(splits)){
-    
-    if(length(which(splits[[sp]] == 0)) > 0){
-      zeros <- which(splits[[sp]] == 0)
-      
-      change_count <- 0
-      
-      for(d in 1:length(zeros)){
-        if(zeros[d] < current_split){
-          change_count <- change_count + 1
-        }
-      }
-      
-      next_possible_splits <- tail(1: (current_split*divide_factor), divide_factor)
-      next_possible_splits <- next_possible_splits - change_count
-      
-      if(splits[[sp]][current_split] == 0){
-        current_split <- next_possible_splits[1]
-      }else{
-        direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split])
-        
-        if(direction == "left")
-          current_split <- next_possible_splits[1]
-        else
-          current_split <- next_possible_splits[2]
-      }
-    }else{
-      direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split])
-      next_possible_splits <- tail(1: (current_split*divide_factor), divide_factor)
-      
-      if(direction == "left")
-        current_split <- next_possible_splits[1]
-      else
-        current_split <- next_possible_splits[2]
-    }
-  }
-  current_split
-}
-
-
-# Sum of squares function
-SS <- function(p, train_data, current_lg) {
-  splitted_nodes <- create_split(train_data, current_lg, p)
-  
-  left <- splitted_nodes$left_node
-  right <-  splitted_nodes$right_node 
-  
-  if(nrow(left) > 0 & nrow(right) > 0){
-    residuals_l <- left$y - fit_global_model(left)$predictions
-    residuals_r <- right$y - fit_global_model(right)$predictions
-    current_residuals <- c(residuals_l, residuals_r)
-    cost <-  sum(current_residuals ^ 2)
-  }else{
-    cost <- Inf
-  }
-  
-  cost
-}
-
-
-check_linearity <- function(parent_node, child_nodes, lag, significance){
-  print("lin test")
-  
-  is_significant <- TRUE
-  
-  ss0 <- sum((parent_node$y - as.numeric(fit_global_model(parent_node)[["predictions"]])) ^2) 
-    
-  if(ss0 == 0){
-    is_significant <- FALSE
-  }else{
-    train_residuals <- NULL
-    for(ln in 1:length(child_nodes)){
-      train_residuals <- c(train_residuals, (child_nodes[[ln]]$y - as.numeric(fit_global_model(child_nodes[[ln]])[["predictions"]]))) 
-    }
-    
-    ss1 <- sum(train_residuals ^ 2)
-    
-    
-    # Compute F-statistic. For details, see https://online.stat.psu.edu/stat501/lesson/6/6.2
-    f_stat <- ((ss0 - ss1)/(lag+1))/(ss1/(nrow(parent_node) - 2*lag - 2))
-    p_value <- pf(f_stat, lag+1, nrow(parent_node) - 2*lag - 2, lower.tail = FALSE)
-    
-    if(p_value > significance)
-      is_significant <- FALSE
-    
-    print(paste0("P-value = ", p_value, " Significant ", is_significant))
-  }
-  
-  is_significant
-}
-
-
-check_error_improvement <- function(parent_node, child_nodes, error_threshold){
-  print("error improvement")
-  
-  is_improved <- TRUE
-  
-  ss0 <- sum((parent_node$y - as.numeric(fit_global_model(parent_node)[["predictions"]])) ^2) 
-  
-  if(ss0 == 0){
-    is_improved <- FALSE
-  }else{
-    train_residuals <- NULL
-    for(ln in 1:length(child_nodes)){
-      train_residuals <- c(train_residuals, (child_nodes[[ln]]$y - as.numeric(fit_global_model(child_nodes[[ln]])[["predictions"]]))) 
-    }
-    
-    ss1 <- sum(train_residuals ^ 2)
-    
-    improvement <- (ss0-ss1)/ss0
-    
-    if(improvement < error_threshold)
-      is_improved <- FALSE
-    
-    print(paste0("Error improvement = ", improvement, " Enough improvement ", is_improved))
-  }
-  
-  is_improved
-}
+# input_file_name <- "chaotic_logistic_dataset.tsf"
+# lag <- 10
+# key <- "series_name"
+# index <- NULL
+# forecast_horizon <- 8
+# dataset_name = "chaotic_logistic"
+# integer_conversion = F
+# depth = 1000
+# significance = 0.05
+# tune_method = "grid_search"
+# scale = FALSE
+# seq_significance = T
 
 
 do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05, scale = FALSE, seq_significance = TRUE, significance_divider = 2, error_threshold = 0.03, stopping_criteria = "both", fixed_lag = FALSE, external_lag = 0){
@@ -174,7 +47,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   node_data <- list(embedded_series)
   
   split_info <- 1
-    
+  
   for(d in 1:depth){
     print(paste0("Depth: ", d))
     level_th_lags <- NULL
@@ -238,7 +111,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
             is_significant <- check_error_improvement(node_data[[n]], splited_nodes, error_threshold)
           else if(stopping_criteria == "both")
             is_significant <- check_linearity(node_data[[n]], splited_nodes, lag, significance) & check_error_improvement(node_data[[n]], splited_nodes, error_threshold) 
-            
+          
           if(is_significant){
             level_th_lags <- c(level_th_lags, th_lag)
             level_thresholds <- c(level_thresholds, th)
@@ -294,7 +167,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     leaf_nodes <- tree[[length(tree)]]
     leaf_trained_models <- list()
     num_of_leaf_instances <- NULL
-      
+    
     # Train a linear model per each leaf node
     for(ln in 1:length(leaf_nodes)){
       leaf_trained_models[[ln]] <- fit_global_model(leaf_nodes[[ln]])[["model"]] 
@@ -309,7 +182,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   
   if(fixed_lag)
     file_name <- paste0(file_name, "_fixed_lag")
-    
+  
   if(stopping_criteria != "lin_test")
     file_name <- paste0(file_name, "_error_threshold_", error_threshold)
   
@@ -340,7 +213,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     }else{
       horizon_predictions <- predict.glm(object = final_trained_model, newdata = as.data.frame(final_lags))
     }
-  
+    
     forecasts <- cbind(forecasts, horizon_predictions)
     
     # Updating the test set for the next horizon
@@ -361,11 +234,11 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   
   # Finish timestamp
   end_time <- Sys.time()
- 
+  
   if(integer_conversion)
     forecasts <- round(forecasts)
   
- 
+  
   write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", "setar", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
   
   print(th_lags)
@@ -387,18 +260,122 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
 # Experiments
 
 # Chaotic Logistic
-do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1, index = NULL, significance = 0.001, tune_method = "genoud")
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 4, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 5, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 6, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 7, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 8, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 9, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 10, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, significance = 0.001)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, significance = 0.05, seq_significance = TRUE)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, stopping_criteria = "error_imp", error_threshold = 0.03)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, stopping_criteria = "lin_test", fixed_lag = T)
+
 
 # Mackey glass
-do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1, index = NULL, significance = 0.001)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 4, index = NULL, significance = 0.001)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 6, index = NULL, significance = 0.001)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 10, index = NULL, significance = 0.001)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, significance = 0.001)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, significance = 0.05, seq_significance = TRUE)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, stopping_criteria = "error_imp", error_threshold = 0.03)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, stopping_criteria = "lin_test", fixed_lag = T)
+
 
 # Tourism Quarterly
-do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1, significance = 0.001)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 6, significance = 0.001)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 10, significance = 0.001)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, significance = 0.001)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, significance = 0.05, seq_significance = TRUE)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, significance = 0.05, seq_significance = TRUE, significance_divider = 10)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, significance = 0.05, seq_significance = TRUE, significance_divider = 100)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, stopping_criteria = "error_imp", error_threshold = 0.03)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, stopping_criteria = "lin_test", fixed_lag = T)
+
 
 # Kaggle Daily
-do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 74, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 4, integer_conversion = T, significance = 0.001)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 6, integer_conversion = T, significance = 0.001)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, significance = 0.001)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, significance = 0.05, seq_significance = TRUE)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, significance = 0.05, seq_significance = TRUE, significance_divider = 10)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, significance = 0.05, seq_significance = TRUE, significance_divider = 100)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", error_threshold = 0.03)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", fixed_lag = T)
+# do_setar_forecasting("kaggle_web_traffic_997_dataset.tsf", 10, 59, "kaggle_daily_997", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
+
+do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "both")
+# do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "lin_test")
+# do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "error_imp")
+
+
 
 # Rossmann
-do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 10, significance = 0.001)
+# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, significance = 0.05, seq_significance = TRUE)
+# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", error_threshold = 0.03)
+# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", fixed_lag = T)
 
 
+# Walmart Store Sales
+# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "both")
+# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "lin_test")
+# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "error_imp")
+
+
+# Restaurant Visitors
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both")
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.001)
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test")
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp", error_threshold = 0.001)
+
+
+# Favourita Sales
+# do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "both")
+# do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.001)
+# do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "lin_test")
+# do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "error_imp", error_threshold = 0.001)
+
+do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "both")
+# do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "lin_test")
+# do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "error_imp")
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Other datasets
+# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, significance = 0.001)
+# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, significance = 0.05, seq_significance = TRUE)
+# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, stopping_criteria = "error_imp", error_threshold = 0.01)
+# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, stopping_criteria = "lin_test", fixed_lag = T)
+
+# do_setar_forecasting("electricity_weekly_dataset.tsf", 10, 8, "electricity_weekly", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("m3_quarterly_dataset.tsf", 10, 8, "m3_quarterly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("m1_quarterly_dataset.tsf", 10, 8, "m1_quarterly", depth = 10, significance = 0.001)
+# do_setar_forecasting("traffic_weekly_dataset.tsf", 10, 8, "traffic_weekly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("m3_monthly_dataset.tsf", 15, 18, "m3_monthly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("m1_monthly_dataset.tsf", 15, 18, "m1_monthly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
+# do_setar_forecasting("hospital_dataset.tsf", 15, 12, "hospital", depth = 1000, stopping_criteria = "both", error_threshold = 0.03, integer_conversion = T)

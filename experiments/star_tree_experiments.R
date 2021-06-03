@@ -1,4 +1,4 @@
-BASE_DIR <- "SETAR_Trees"
+BASE_DIR <- "C:/Projects/SETAR_Trees/"
 
 source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 

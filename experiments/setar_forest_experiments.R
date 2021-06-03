@@ -1,4 +1,4 @@
-# BASE_DIR <- "C:/Projects/SETAR_Trees/"
+# BASE_DIR <- "C:/Projects/SETAR_Trees"
 BASE_DIR <- "/home/rakshitha/Trees/"
 
 source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
@@ -16,7 +16,7 @@ source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 # tune_method = "grid_search"
 # seq_significance = T
 
-setar_tree_forecasting <- function(tree_data, lag, forecast_horizon, final_lags, feature_indexes, depth = 1000, significance = 0.5, seq_significance = TRUE, stopping_criteria = "both", error_threshold = 0.03, random_lag = FALSE, random_threshold = FALSE, random_significance = FALSE, random_error_threshold = FALSE, num_leaves = 100000, min_data_in_leaf = 0){
+setar_tree_forecasting <- function(tree_data, lag, forecast_horizon, final_lags, feature_indexes, depth = 1000, significance = 0.5, seq_significance = TRUE, significance_divider = 2, stopping_criteria = "both", error_threshold = 0.03, random_lag = FALSE, random_threshold = FALSE, random_significance = FALSE, random_error_threshold = FALSE, random_configuration = FALSE, num_leaves = 100000, min_data_in_leaf = 0){
   tree <- list()
   th_lags <- list()
   thresholds <- list()
@@ -28,6 +28,7 @@ setar_tree_forecasting <- function(tree_data, lag, forecast_horizon, final_lags,
   node_data <- list(tree_data)
   
   split_info <- 1
+  
   
   for(d in 1:depth){
     print(paste0("Depth: ", d))
@@ -71,6 +72,10 @@ setar_tree_forecasting <- function(tree_data, lag, forecast_horizon, final_lags,
             }
           }
         }else{
+          tune_costs <- NULL
+          tune_lags <- NULL
+          tune_thresholds <- NULL
+          
           for(lg in feature_indexes){
             print(paste0("Lag ", lg))
             
@@ -80,13 +85,31 @@ setar_tree_forecasting <- function(tree_data, lag, forecast_horizon, final_lags,
             for(ids in 1:length(ths)){
               cost <- SS(ths[ids], node_data[[n]], lg)
               
-              if(cost <= best_cost) { # find th which minimizes the squared errors
-                best_cost <- cost;
-                th <- ths[ids]
-                th_lag <- lg
-              }
+              tune_lags <- c(tune_lags, lg)
+              tune_thresholds <- c(tune_thresholds, ths[ids])
+              tune_costs <- c(tune_costs, cost)
+              
+              # if(cost <= best_cost) { # find th which minimizes the squared errors
+              #   best_cost <- cost;
+              #   th <- ths[ids]
+              #   th_lag <- lg
+              # }
             }
           }
+          
+          tune_results <- data.frame("lag" = tune_lags, "threshold" = tune_thresholds, "cost" = tune_costs)
+          tune_results <- tune_results[order(tune_results$cost),]
+          top_tune_results <- head(tune_results, 5)
+          
+          if(random_configuration){
+            set.seed(d+n)
+            chosen_config <- top_tune_results[sample(1:5, 1),]
+          }else
+            chosen_config <- top_tune_results[1,]
+          
+          best_cost <- chosen_config$cost;
+          th <- chosen_config$threshold
+          th_lag <- chosen_config$lag
         }
         
         
@@ -156,7 +179,7 @@ setar_tree_forecasting <- function(tree_data, lag, forecast_horizon, final_lags,
       split_info <- level_split_info
       
       if(seq_significance)
-        significance <- significance/2
+          significance <- significance/significance_divider
     }else
       break
   }
@@ -215,7 +238,7 @@ setar_tree_forecasting <- function(tree_data, lag, forecast_horizon, final_lags,
 }
 
 
-do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 1000, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05, seq_significance = TRUE, error_threshold = 0.03, stopping_criteria = "both", bagging_fraction = 0.5, bagging_freq = 1, feature_fraction = 1, random_lag = FALSE, random_threshold = FALSE, random_significance = FALSE, random_error_threshold = FALSE, num_leaves = 100000, min_data_in_leaf = 0){
+do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 1000, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05, seq_significance = TRUE, significance_divider = 2, error_threshold = 0.03, stopping_criteria = "both", bagging_fraction = 0.5, bagging_freq = 1, feature_fraction = 1, random_lag = FALSE, random_threshold = FALSE, random_significance = FALSE, random_error_threshold = FALSE, random_tree_significance = FALSE, random_significance_divider = FALSE, random_tree_error_threshold = FALSE, random_configuration = FALSE, num_leaves = 100000, min_data_in_leaf = 0){
   
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon)
   training_set <- loaded_data[[1]]
@@ -246,7 +269,25 @@ do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, 
       
     current_tree_data <- embedded_series[tree_indexes, c(1, (feature_indexes + 1))]
     
-    all_tree_forecasts[[bag_f]] <- setar_tree_forecasting(current_tree_data, lag, forecast_horizon, full_final_lags, feature_indexes, depth, significance, seq_significance, stopping_criteria, error_threshold, random_lag, random_threshold, random_significance, random_error_threshold, num_leaves, min_data_in_leaf)
+    if(random_tree_significance){
+      set.seed(bag_f)
+      significance <- sample(seq(0.01, 0.1, length.out = 10), 1)
+      print(paste0("Chosen significance: ", significance))
+    }
+    
+    if(random_significance_divider){
+      set.seed(bag_f)
+      significance_divider <- sample(2:10, 1)
+      print(paste0("Chosen significance divider: ", significance_divider))
+    }
+    
+    if(random_tree_error_threshold){
+      set.seed(bag_f)
+      error_threshold <- sample(seq(0.001, 0.05, length.out = 50), 1)
+      print(paste0("Chosen error threshold: ", error_threshold))
+    }
+    
+    all_tree_forecasts[[bag_f]] <- setar_tree_forecasting(current_tree_data, lag, forecast_horizon, full_final_lags, feature_indexes, depth, significance, seq_significance, significance_divider, stopping_criteria, error_threshold, random_lag, random_threshold, random_significance, random_error_threshold, random_configuration, num_leaves, min_data_in_leaf)
   }
  
   final_forecasts <- all_tree_forecasts[[1]]
@@ -263,13 +304,14 @@ do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, 
   if(integer_conversion)
     final_forecasts <- round(final_forecasts)
   
-  file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_min_leaf_", min_data_in_leaf, "_leaves_", num_leaves, "_setar_forest_", bagging_freq, "_bagging_frac_", bagging_fraction, "_feature_frac_", feature_fraction, "_", stopping_criteria)
-
+  file_name <- paste0(dataset_name, "_lag_", lag, "_setar_forest_", bagging_freq, "_bagging_frac_", bagging_fraction, "_feature_frac_", feature_fraction, "_", stopping_criteria)
+  # "_depth_", depth, "_min_leaf_", min_data_in_leaf, "_leaves_", num_leaves
+  
   if(stopping_criteria != "lin_test" & !random_error_threshold)
     file_name <- paste0(file_name, "_error_threshold_", error_threshold)
   
-  if(seq_significance)
-    file_name <- paste0(file_name, "_seq_significance")
+  # if(seq_significance)
+  #   file_name <- paste0(file_name, "_seq_significance")
   
   if(random_lag)
     file_name <- paste0(file_name, "_random_lag")
@@ -282,6 +324,18 @@ do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, 
   
   if(random_error_threshold)
     file_name <- paste0(file_name, "_random_error_threshold")
+  
+  if(random_tree_significance)
+    file_name <- paste0(file_name, "_random_tree_significance")
+  
+  if(random_tree_error_threshold)
+    file_name <- paste0(file_name, "_random_tree_error_threshold")
+  
+  if(random_significance_divider)
+    file_name <- paste0(file_name, "_random_significance_divider")
+  
+  if(random_configuration)
+    file_name <- paste0(file_name, "_random_configuration")
   
   write.table(final_forecasts, file.path(BASE_DIR, "results", "forecasts", "setar_forest", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
   
@@ -385,8 +439,15 @@ do_setar_forest_block_bootstrap_forecasting <- function(input_file_name, lag, fo
 
 # do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE)
 # do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE, random_significance = TRUE)
-do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
+# do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
 
+# do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE)
+# do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
+# do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_configuration = TRUE)
+do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+
+# Need to run
+# do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
 
 
 # Mackey glass
@@ -402,8 +463,15 @@ do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logi
 
 # do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE)
 # do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE, random_significance = TRUE)
-do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
+# do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
 
+# do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE)
+# do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
+# do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_configuration = TRUE)
+do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+
+# Need to run
+# do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
 
 
 # Tourism Quarterly
@@ -419,8 +487,15 @@ do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", i
 
 # do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE)
 # do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE, random_significance = TRUE)
-do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
+# do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
 
+# do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE)
+# do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
+# do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_configuration = TRUE)
+do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+
+# Need to run
+# do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
 
 
 # Kaggle Daily
@@ -435,8 +510,15 @@ do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_qua
 
 # do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE)
 # do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE, random_significance = TRUE)
-do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
+# do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
 
+# do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE)
+# do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
+# do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_configuration = TRUE)
+do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+
+# Need to run
+# do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
 
 
 # Rossmann
@@ -449,7 +531,41 @@ do_setar_forest_forecasting("kaggle_web_traffic_dataset_1000_without_missing_val
 
 # do_setar_forest_block_bootstrap_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 100, feature_fraction = 1, num_leaves = 64, min_data_in_leaf = 100)
 
-do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
-do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE)
-do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE, random_significance = TRUE)
+# do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_significance = TRUE)
+# do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE)
+# do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_error_threshold = TRUE, random_significance = TRUE)
+
+# do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE)
+# do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
+# do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_configuration = TRUE)
+do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+
+# Need to run
+# do_setar_forest_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
+
+
+# Walmart Store Sales
+# do_setar_forest_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE)
+# do_setar_forest_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
+# do_setar_forest_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_configuration = TRUE)
+do_setar_forest_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+# do_setar_forest_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
+
+
+# Restaurant Visitors
+# do_setar_forest_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", index = NULL, integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, error_threshold = 0.001)
+# do_setar_forest_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", index = NULL, integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, error_threshold = 0.001)
+# do_setar_forest_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", index = NULL, integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_configuration = TRUE, error_threshold = 0.001)
+do_setar_forest_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", index = NULL, integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+# do_setar_forest_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", index = NULL, integer_conversion = T, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
+
+
+# Favourita Sales
+# do_setar_forest_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, error_threshold = 0.001)
+# do_setar_forest_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, error_threshold = 0.001)
+# do_setar_forest_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_configuration = TRUE, error_threshold = 0.001)
+do_setar_forest_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+# do_setar_forest_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
+
+
 
