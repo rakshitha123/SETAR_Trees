@@ -7,8 +7,8 @@ source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 do_local_forecasting <- function(input_file_name, forecast_horizon, dataset_name, method, key = "series_name", index = "start_timestamp", integer_conversion = F){
   
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon)
-  training_set <- loaded_data[[1]]
-  test_set <- loaded_data[[2]]
+  training_set <- loaded_data[[1]]$series
+  test_set <- loaded_data[[2]]$series
   seasonality <- loaded_data[[3]]
   
   forecasts <- matrix(NA, nrow = length(training_set), ncol = forecast_horizon)
@@ -57,8 +57,8 @@ do_local_forecasting <- function(input_file_name, forecast_horizon, dataset_name
 # Kaggle Daily
 # do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 59, "kaggle_daily", "ets", integer_conversion = TRUE)
 # do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 59, "kaggle_daily", "arima", integer_conversion = TRUE)
-do_local_forecasting("kaggle_web_traffic_dataset_10000.tsf", 59, "kaggle_daily_10000", "ets", integer_conversion = TRUE)
-do_local_forecasting("kaggle_web_traffic_dataset_10000.tsf", 59, "kaggle_daily_10000", "arima", integer_conversion = TRUE)
+# do_local_forecasting("kaggle_web_traffic_dataset_10000.tsf", 59, "kaggle_daily_10000", "ets", integer_conversion = TRUE)
+# do_local_forecasting("kaggle_web_traffic_dataset_10000.tsf", 59, "kaggle_daily_10000", "arima", integer_conversion = TRUE)
 
 # Tourism Quarterly
 # do_local_forecasting("tourism_quarterly_dataset.tsf", 8, "tourism_quarterly", "ets")
@@ -73,8 +73,8 @@ do_local_forecasting("kaggle_web_traffic_dataset_10000.tsf", 59, "kaggle_daily_1
 # do_local_forecasting("walmart_store_sales_dataset.tsf", 39, "walmart", "arima", index = NULL)
 
 # Restaurant Visitors
-# do_local_forecasting("restaurant_visitors_dataset.tsf", 39, "restaurant", "ets", index = NULL, integer_conversion = T)
-# do_local_forecasting("restaurant_visitors_dataset.tsf", 39, "restaurant", "arima", index = NULL, integer_conversion = T)
+do_local_forecasting("restaurant_visitors_dataset.tsf", 39, "restaurant", "ets", index = NULL, integer_conversion = T)
+do_local_forecasting("restaurant_visitors_dataset.tsf", 39, "restaurant", "arima", index = NULL, integer_conversion = T)
 
 # Favourita Sales
 # do_local_forecasting("favourita_sales_1000_dataset.tsf", 16, "favourita", "ets", index = NULL)
