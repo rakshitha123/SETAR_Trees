@@ -236,9 +236,9 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
         if(!is.null(categorical_covariates)){
           check_result <- check_leaf_data_matching(leaf_nodes[[leaf_index]], pred_instance, categorical_covariates)
           pred_instance <- check_result[[2]]
-          
+
           if(check_result[[3]]){
-            leaf_model <- fit_global_model(check_result[[1]], NULL, categorical_covariates)[["model"]] 
+            leaf_model <- fit_global_model(check_result[[1]], NULL, categorical_covariates)[["model"]]
           }
         }
         
@@ -365,24 +365,11 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
 
 # Restaurant Visitors
 # do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both")
-do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-
-do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test")
-do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp")
-
-do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-
-
-
-# Walmart Store Sales
-# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "both")
-# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "lin_test")
-# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "error_imp")
-
-do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")
-do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")
-do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")
+# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test")
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp")
+# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
 
 
 
@@ -402,13 +389,17 @@ do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", dep
 
 
 # Need to run
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+
 # do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "both")
 # do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "lin_test")
 # do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "error_imp")
 
-# do_setar_forecasting("kaggle_with_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "both", categorical_covariates = c("agent", "access", "project"), series_prefix = "T")
-# do_setar_forecasting("kaggle_with_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = c("agent", "access", "project"), series_prefix = "T")
-# do_setar_forecasting("kaggle_with_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = c("agent", "access", "project"), series_prefix = "T")
+# do_setar_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
 
 
 
@@ -420,13 +411,17 @@ do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", dep
 
 
 # Need to run
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+
 # do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "both")
 # do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "lin_test")
 # do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "error_imp")
 
-# do_setar_forecasting("favourita_with_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = c("onpromotion", "family", "perishable", "city"), series_prefix = "T"))
-# do_setar_forecasting("favourita_with_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = c("onpromotion", "family", "perishable", "city"), series_prefix = "T"))
-# do_setar_forecasting("favourita_with_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = c("onpromotion", "family", "perishable", "city"), series_prefix = "T"))
+# do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
 
 
 
@@ -461,3 +456,13 @@ do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", dep
 # do_setar_forecasting("m3_monthly_dataset.tsf", 15, 18, "m3_monthly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
 # do_setar_forecasting("m1_monthly_dataset.tsf", 15, 18, "m1_monthly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
 # do_setar_forecasting("hospital_dataset.tsf", 15, 12, "hospital", depth = 1000, stopping_criteria = "both", error_threshold = 0.03, integer_conversion = T)
+
+
+# Walmart Store Sales
+# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "both")
+# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "lin_test")
+# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "error_imp")
+
+# do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")
+# do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")
+# do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")

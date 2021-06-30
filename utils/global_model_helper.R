@@ -82,13 +82,8 @@ create_input_matrix <- function(training_set, lag, scale = FALSE, test_set = NUL
   if(!is.null(categorical_covariates)){
     colnames(embedded_series)[(lag + 2):(lag + length(categorical_covariates) + 1)] <- categorical_covariates
     colnames(final_lags)[(lag + 1):(lag + length(categorical_covariates))] <- categorical_covariates
-    
-    for(cat in categorical_covariates){
-      embedded_series[[cat]] <- factor(embedded_series[[cat]])
-      final_lags[[cat]] <- factor(final_lags[[cat]], levels = unique(embedded_series[[cat]]))
-    }
-    # embedded_series[(lag + 2):(lag + length(categorical_covariates) + 1)] <- lapply(embedded_series[(lag + 2):(lag + length(categorical_covariates) + 1)], function(x) as.factor(x))
-    # final_lags[(lag + 1):(lag + length(categorical_covariates))] <- lapply(final_lags[(lag + 1):(lag + length(categorical_covariates))], function(x) as.factor(x))
+    embedded_series[(lag + 2):(lag + length(categorical_covariates) + 1)] <- lapply(embedded_series[(lag + 2):(lag + length(categorical_covariates) + 1)], function(x) as.factor(x))
+    final_lags[(lag + 1):(lag + length(categorical_covariates))] <- lapply(final_lags[(lag + 1):(lag + length(categorical_covariates))], function(x) as.factor(x))
   }
   
   if(!is.null(numerical_covariates)){
@@ -186,7 +181,7 @@ split_data <- function(input, forecast_horizon){
 
 # Fitting a global regression model
 fit_global_model <- function(fitting_data, test_data = NULL, categorical_covariates = NULL) {
-  #if(!is.null(categorical_covariates)){
+  if(!is.null(categorical_covariates)){
     # cat_node_indexes <- which(colnames(fitting_data) %in% categorical_covariates)
     # 
     # for(cn_ind in cat_node_indexes){
@@ -196,11 +191,13 @@ fit_global_model <- function(fitting_data, test_data = NULL, categorical_covaria
     
     
     
-    # for(cat in categorical_covariates){
-    #   if(nlevels(fitting_data[[cat]]) == 1)
-    #     fitting_data[[cat]] <- as.numeric(fitting_data[[cat]])
-    # }
-  #}
+    for(cat in categorical_covariates){
+      if(cat %in% colnames(fitting_data)){
+        if(nlevels(fitting_data[[cat]]) == 1)
+          fitting_data[[cat]] <- as.numeric(fitting_data[[cat]])
+      }
+    }
+  }
   
   model <- glm(formula = create_formula(fitting_data), data = fitting_data)
   
@@ -218,13 +215,15 @@ check_leaf_data_matching <- function(leaf_data, instance, categorical_covariates
   changed_leaf <- FALSE
   
   for(cat in categorical_covariates){
-    if(nlevels(leaf_data[[cat]]) == 1)
-      instance[[cat]] <- as.numeric(instance[[cat]])
-    
-    if(!(instance[[cat]] %in% as.numeric(levels(leaf_data[[cat]])))){
-      leaf_data[[cat]] <- as.numeric(leaf_data[[cat]])
-      instance[[cat]] <- as.numeric(instance[[cat]])
-      changed_leaf = TRUE
+    if(cat %in% colnames(leaf_data)){
+      if(nlevels(leaf_data[[cat]]) == 1)
+        instance[[cat]] <- as.numeric(instance[[cat]])
+      
+      if(!(instance[[cat]] %in% as.numeric(levels(leaf_data[[cat]])))){
+        leaf_data[[cat]] <- as.numeric(leaf_data[[cat]])
+        instance[[cat]] <- as.numeric(instance[[cat]])
+        changed_leaf <- TRUE
+      }
     }
   }
   

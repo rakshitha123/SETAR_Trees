@@ -1,25 +1,22 @@
 # SETAR tree helper functions
 
 create_split <- function(data, conditional_lag, threshold, categorical_covariates = NULL){
-  is_changed <- FALSE
-  unique_vals <- NULL
   
   if(!is.null(categorical_covariates)){
-    cat_indexes <- (which(colnames(data) %in% categorical_covariates))
-    
-    if((conditional_lag + 1) %in% cat_indexes){
-      unique_vals <- unique(as.numeric(levels(data[,conditional_lag + 1])))
-      data[,conditional_lag + 1] <- as.numeric(as.character(data[,conditional_lag + 1]))
-      is_changed <- TRUE
+    for(cat_cov in categorical_covariates){
+      if(cat_cov %in% colnames(data))
+        data[[cat_cov]] <- as.numeric(as.character(data[[cat_cov]]))
     }
   }
   
   left_node <- data[data[,(conditional_lag + 1)] < threshold,]
   right_node <- data[data[,(conditional_lag + 1)] >= threshold,]
   
-  if(is_changed){
-    left_node[,(conditional_lag + 1)] <- factor(left_node[,(conditional_lag + 1)], levels = unique_vals)
-    right_node[,(conditional_lag + 1)] <- factor(right_node[,(conditional_lag + 1)], levels = unique_vals)
+  for(cat_cov in categorical_covariates){
+    if(cat_cov %in% colnames(data)){
+      left_node[[cat_cov]] <- as.factor(left_node[[cat_cov]])
+      right_node[[cat_cov]] <- as.factor(right_node[[cat_cov]])
+    }
   }
   
   list("left_node" = left_node, "right_node" = right_node)

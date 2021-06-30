@@ -54,7 +54,7 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
         lowest_error <- data.frame("error" = mean(abs(nnetcv$residuals[,1])))
         lowest_error_list[[row]] <- lowest_error
       }, error = function(e)  
-        lowest_error_list[[row]] <- data.frame("error" = Inf)
+        lowest_error_list[[row]] <<- data.frame("error" = Inf)
       )
     }
     
@@ -267,7 +267,7 @@ forec_recursive <- function(train_data, lag, model, final_lags, forecast_horizon
       if(!is.null(categorical_covariates)){
         for(cat_cov in categorical_covariates){
           final_lags[[cat_cov]] <- test_set[[cat_cov]][, (i+1)]
-          final_lags[[cat_cov]] <- factor(final_lags[[cat_cov]], levels = unique(train_data[[cat_cov]]))
+          final_lags[[cat_cov]] <- as.factor(final_lags[[cat_cov]])
         }
       }
       
