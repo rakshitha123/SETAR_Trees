@@ -1,37 +1,16 @@
 # SETAR tree helper functions
 
-create_split <- function(data, conditional_lag, threshold, categorical_covariates = NULL){
-  
-  if(!is.null(categorical_covariates)){
-    for(cat_cov in categorical_covariates){
-      if(cat_cov %in% colnames(data))
-        data[[cat_cov]] <- as.numeric(as.character(data[[cat_cov]]))
-    }
-  }
+create_split <- function(data, conditional_lag, threshold){
   
   left_node <- data[data[,(conditional_lag + 1)] < threshold,]
   right_node <- data[data[,(conditional_lag + 1)] >= threshold,]
-  
-  for(cat_cov in categorical_covariates){
-    if(cat_cov %in% colnames(data)){
-      left_node[[cat_cov]] <- as.factor(left_node[[cat_cov]])
-      right_node[[cat_cov]] <- as.factor(right_node[[cat_cov]])
-    }
-  }
   
   list("left_node" = left_node, "right_node" = right_node)
 }
 
 
-tree_traverse <- function(instance, split, threshold, categorical_covariates = NULL){
+tree_traverse <- function(instance, split, threshold){
   direction <- "left"
-  
-  if(!is.null(categorical_covariates)){
-    cat_indexes <- which(colnames(instance) %in% categorical_covariates)
-    
-    if(split %in% cat_indexes)
-      instance[,split] <- as.numeric(as.character(instance[,split]))
-  }
   
   if(instance[,split] >= threshold)  #[[paste0("Lag", split)]]
     direction <- "right"
@@ -40,7 +19,7 @@ tree_traverse <- function(instance, split, threshold, categorical_covariates = N
 }
 
 
-get_leaf_index <- function(instance, splits, thresholds, categorical_covariates= NULL){
+get_leaf_index <- function(instance, splits, thresholds){
   current_split <- 1
   divide_factor <- 2
   
@@ -63,7 +42,7 @@ get_leaf_index <- function(instance, splits, thresholds, categorical_covariates=
       if(splits[[sp]][current_split] == 0){
         current_split <- next_possible_splits[1]
       }else{
-        direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split], categorical_covariates)
+        direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split])
         
         if(direction == "left")
           current_split <- next_possible_splits[1]
@@ -71,7 +50,7 @@ get_leaf_index <- function(instance, splits, thresholds, categorical_covariates=
           current_split <- next_possible_splits[2]
       }
     }else{
-      direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split], categorical_covariates)
+      direction <- tree_traverse(instance, splits[[sp]][current_split], thresholds[[sp]][current_split])
       next_possible_splits <- tail(1: (current_split*divide_factor), divide_factor)
       
       if(direction == "left")
@@ -85,15 +64,15 @@ get_leaf_index <- function(instance, splits, thresholds, categorical_covariates=
 
 
 # Sum of squares function
-SS <- function(p, train_data, current_lg, categorical_covariates = NULL) {
-  splitted_nodes <- create_split(train_data, current_lg, p, categorical_covariates)
+SS <- function(p, train_data, current_lg) {
+  splitted_nodes <- create_split(train_data, current_lg, p)
   
   left <- splitted_nodes$left_node
   right <-  splitted_nodes$right_node 
   
   if(nrow(left) > 0 & nrow(right) > 0){
-    residuals_l <- left$y - fit_global_model(left, NULL, categorical_covariates)$predictions
-    residuals_r <- right$y - fit_global_model(right, NULL, categorical_covariates)$predictions
+    residuals_l <- left$y - fit_global_model(left, NULL)$predictions
+    residuals_r <- right$y - fit_global_model(right, NULL)$predictions
     current_residuals <- c(residuals_l, residuals_r)
     cost <-  sum(current_residuals ^ 2)
   }else{
@@ -104,19 +83,19 @@ SS <- function(p, train_data, current_lg, categorical_covariates = NULL) {
 }
 
 
-check_linearity <- function(parent_node, child_nodes, lag, significance, categorical_covariates = NULL){
+check_linearity <- function(parent_node, child_nodes, lag, significance){
   print("lin test")
   
   is_significant <- TRUE
   
-  ss0 <- sum((parent_node$y - as.numeric(fit_global_model(parent_node, NULL, categorical_covariates)[["predictions"]])) ^2) 
+  ss0 <- sum((parent_node$y - as.numeric(fit_global_model(parent_node, NULL)[["predictions"]])) ^2) 
   
   if(ss0 == 0){
     is_significant <- FALSE
   }else{
     train_residuals <- NULL
     for(ln in 1:length(child_nodes)){
-      train_residuals <- c(train_residuals, (child_nodes[[ln]]$y - as.numeric(fit_global_model(child_nodes[[ln]], NULL, categorical_covariates)[["predictions"]]))) 
+      train_residuals <- c(train_residuals, (child_nodes[[ln]]$y - as.numeric(fit_global_model(child_nodes[[ln]], NULL)[["predictions"]]))) 
     }
     
     ss1 <- sum(train_residuals ^ 2)
@@ -136,19 +115,19 @@ check_linearity <- function(parent_node, child_nodes, lag, significance, categor
 }
 
 
-check_error_improvement <- function(parent_node, child_nodes, error_threshold, categorical_covariates = NULL){
+check_error_improvement <- function(parent_node, child_nodes, error_threshold){
   print("error improvement")
   
   is_improved <- TRUE
   
-  ss0 <- sum((parent_node$y - as.numeric(fit_global_model(parent_node, NULL, categorical_covariates)[["predictions"]])) ^2) 
+  ss0 <- sum((parent_node$y - as.numeric(fit_global_model(parent_node, NULL)[["predictions"]])) ^2) 
   
   if(ss0 == 0){
     is_improved <- FALSE
   }else{
     train_residuals <- NULL
     for(ln in 1:length(child_nodes)){
-      train_residuals <- c(train_residuals, (child_nodes[[ln]]$y - as.numeric(fit_global_model(child_nodes[[ln]], NULL, categorical_covariates)[["predictions"]]))) 
+      train_residuals <- c(train_residuals, (child_nodes[[ln]]$y - as.numeric(fit_global_model(child_nodes[[ln]], NULL)[["predictions"]]))) 
     }
     
     ss1 <- sum(train_residuals ^ 2)

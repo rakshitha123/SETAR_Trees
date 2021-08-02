@@ -95,6 +95,112 @@ create_input_matrix <- function(training_set, lag, scale = FALSE, test_set = NUL
 }
 
 
+# Creating embedded matrix and final lags to train the setar tree model
+create_tree_input_matrix <- function(training_set, lag, scale = FALSE, test_set = NULL, categorical_covariates = NULL, numerical_covariates = NULL, cat_unique_vals = NULL){
+  embedded_series <- NULL
+  final_lags <- NULL
+  series_means <- NULL
+  
+  dataset <- training_set$series
+  
+  for (i in 1:length(dataset)) {
+    print(i)
+    time_series <- as.numeric(unlist(dataset[i], use.names = FALSE))
+    
+    mean <- mean(time_series)
+    
+    if(mean != 0){
+      series_means <- c(series_means, mean)
+      
+      if(scale)
+        time_series <- time_series / mean
+    }else
+      series_means <- c(series_means, 1)
+    
+    # Embed the series
+    embedded <- embed(time_series, lag + 1)
+    
+    # Add categorical covariates
+    if(!is.null(categorical_covariates)){
+      for(cat_cov in categorical_covariates){
+        cat_cov_series <- training_set[[cat_cov]][[i]]
+        
+        if(cat_unique_vals[[cat_cov]] > 2){
+          cat_cov_series <- do_one_hot_encoding(cat_cov_series, cat_unique_vals[[cat_cov]], cat_cov)
+          cat_cov_series <- cat_cov_series[(lag + 1): nrow(cat_cov_series),]
+        }else{
+          cat_cov_series <- data.frame(cat_cov_series[(lag + 1): length(cat_cov_series)])
+          colnames(cat_cov_series) <- cat_cov
+        }
+        
+        embedded <- cbind(embedded, cat_cov_series)
+      }
+    }
+    
+    # Add numerical covariates
+    if(!is.null(numerical_covariates)){
+      for(num_cov in numerical_covariates){
+        num_cov_series <- training_set[[num_cov]][[i]]
+        num_cov_series <- num_cov_series[(lag + 1): length(num_cov_series)]
+        embedded <- cbind(embedded, num_cov_series)
+      }
+    }
+    
+    if (!is.null(embedded_series)) 
+      embedded_series <- as.matrix(embedded_series)
+    
+    embedded_series <- rbind(embedded_series, embedded)
+    
+    # Creating the test set
+    current_series_final_lags <- t(as.matrix(rev(tail(time_series, lag))))
+    
+    # Add categorical covariates
+    if(!is.null(categorical_covariates)){
+      for(cat_cov in categorical_covariates){
+        cat_cov_final_lags <- test_set[[cat_cov]][i, 1]
+        
+        if(cat_unique_vals[[cat_cov]] > 2)
+          cat_cov_final_lags <- do_one_hot_encoding(cat_cov_final_lags, cat_unique_vals[[cat_cov]], cat_cov)
+        else{
+          cat_cov_final_lags <- data.frame(cat_cov_final_lags)
+          colnames(cat_cov_final_lags) <- cat_cov
+        }
+        
+        current_series_final_lags <- cbind(current_series_final_lags, cat_cov_final_lags)
+      }
+    }
+    
+    # Add categorical covariates
+    if(!is.null(numerical_covariates)){
+      for(num_cov in numerical_covariates){
+        num_cov_final_lags <- test_set[[num_cov]][i, 1]
+        current_series_final_lags <- cbind(current_series_final_lags, num_cov_final_lags)
+      }
+    }
+    
+    if (!is.null(final_lags)) {
+      final_lags <- as.matrix(final_lags)
+    }
+    
+    final_lags <- rbind(final_lags, current_series_final_lags)
+  }
+  
+  embedded_series <- as.data.frame(embedded_series)
+  colnames(embedded_series)[1] <- "y"
+  colnames(embedded_series)[2:(lag + 1)] <- paste("Lag", 1:lag, sep = "")
+  
+  final_lags <- as.data.frame(final_lags)
+  colnames(final_lags)[1:lag] <- paste("Lag", 1:lag, sep = "")
+  
+  if(!is.null(numerical_covariates)){
+    colnames(embedded_series)[(ncol(embedded_series) - length(numerical_covariates) + 1):ncol(embedded_series)] <- numerical_covariates
+    colnames(final_lags)[(ncol(final_lags) - length(numerical_covariates) + 1):ncol(final_lags)] <- numerical_covariates
+  }
+  
+  list(embedded_series, final_lags, series_means) 
+}
+
+
 # Creating a formula to train a model
 create_formula <- function(data){
   formula <- "y ~ "
@@ -136,6 +242,7 @@ create_train_test_sets <- function(input_file_name, key, index, forecast_horizon
   
   training_set <- list()
   test_set <- list()
+  cat_unique_vals <- list()
   
   if(is.null(categorical_covariates) & is.null(numerical_covariates)){
     output <- split_data(dataset, forecast_horizon) 
@@ -144,7 +251,12 @@ create_train_test_sets <- function(input_file_name, key, index, forecast_horizon
   }else{
     for(type in c(series_prefix, categorical_covariates, numerical_covariates)){
       process_data <- dataset[dataset$type == type,]
+      
+      if(type %in% categorical_covariates)
+        cat_unique_vals[[type]] <- length(unique(process_data[[VALUE_COL_NAME]])) 
+      
       output <- split_data(process_data, forecast_horizon) 
+      
       if(type == series_prefix){
         training_set[["series"]] <- output[[1]]
         test_set[["series"]] <- output[[2]]
@@ -156,7 +268,7 @@ create_train_test_sets <- function(input_file_name, key, index, forecast_horizon
   }
   
   
-  list(training_set, test_set, seasonality)
+  list(training_set, test_set, cat_unique_vals, seasonality)
 }
 
 
@@ -180,25 +292,7 @@ split_data <- function(input, forecast_horizon){
 
 
 # Fitting a global regression model
-fit_global_model <- function(fitting_data, test_data = NULL, categorical_covariates = NULL) {
-  if(!is.null(categorical_covariates)){
-    # cat_node_indexes <- which(colnames(fitting_data) %in% categorical_covariates)
-    # 
-    # for(cn_ind in cat_node_indexes){
-    #   if(nlevels(fitting_data[,cn_ind]) == 1)
-    #     fitting_data[,cn_ind] <- as.numeric(fitting_data[,cn_ind])
-    # }
-    
-    
-    
-    for(cat in categorical_covariates){
-      if(cat %in% colnames(fitting_data)){
-        if(nlevels(fitting_data[[cat]]) == 1)
-          fitting_data[[cat]] <- as.numeric(fitting_data[[cat]])
-      }
-    }
-  }
-  
+fit_global_model <- function(fitting_data, test_data = NULL) {
   model <- glm(formula = create_formula(fitting_data), data = fitting_data)
   
   if(is.null(test_data))
@@ -210,27 +304,41 @@ fit_global_model <- function(fitting_data, test_data = NULL, categorical_covaria
 }
 
 
-check_leaf_data_matching <- function(leaf_data, instance, categorical_covariates){
+# check_leaf_data_matching <- function(leaf_data, instance, categorical_covariates){
+# 
+#   changed_leaf <- FALSE
+#   
+#   for(cat in categorical_covariates){
+#     if(cat %in% colnames(leaf_data)){
+#       if(nlevels(leaf_data[[cat]]) == 1)
+#         instance[[cat]] <- as.numeric(instance[[cat]])
+#       
+#       if(!(instance[[cat]] %in% as.numeric(levels(leaf_data[[cat]])))){
+#         leaf_data[[cat]] <- as.numeric(leaf_data[[cat]])
+#         instance[[cat]] <- as.numeric(instance[[cat]])
+#         changed_leaf <- TRUE
+#       }
+#     }
+#   }
+#   
+#   list("leaf_data" = leaf_data, "instance" = instance, "changed_leaf"  = changed_leaf)
+#   
+# }
 
-  changed_leaf <- FALSE
+
+do_one_hot_encoding <- function(input_series, num_cats, cat_cov){
+  output <- matrix(0, nrow = length(input_series), ncol = num_cats - 1)
   
-  for(cat in categorical_covariates){
-    if(cat %in% colnames(leaf_data)){
-      if(nlevels(leaf_data[[cat]]) == 1)
-        instance[[cat]] <- as.numeric(instance[[cat]])
-      
-      if(!(instance[[cat]] %in% as.numeric(levels(leaf_data[[cat]])))){
-        leaf_data[[cat]] <- as.numeric(leaf_data[[cat]])
-        instance[[cat]] <- as.numeric(instance[[cat]])
-        changed_leaf <- TRUE
-      }
-    }
+  for(z in 1:(num_cats - 1)){
+    change <- which(input_series == z)
+    output[change, z] <- 1
   }
   
-  list("leaf_data" = leaf_data, "instance" = instance, "changed_leaf"  = changed_leaf)
+  output <- as.data.frame(output)
+  colnames(output) <- sprintf(paste0(cat_cov, "%s"), 1:(num_cats - 1))
   
+  output
 }
-
 
 
 

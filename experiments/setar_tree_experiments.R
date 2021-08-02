@@ -31,9 +31,10 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon, categorical_covariates, numerical_covariates, series_prefix, splitter)
   training_set <- loaded_data[[1]]
   test_set <- loaded_data[[2]]
-  seasonality <- loaded_data[[3]]
+  cat_unique_vals <- loaded_data[[3]]
+  seasonality <- loaded_data[[4]]
   
-  result <- create_input_matrix(training_set, lag, scale, test_set, categorical_covariates, numerical_covariates)
+  result <- create_tree_input_matrix(training_set, lag, scale, test_set, categorical_covariates, numerical_covariates, cat_unique_vals)
   embedded_series <- result[[1]]
   final_lags <- result[[2]]
   series_means <- result[[3]]
@@ -56,10 +57,15 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   
   split_info <- 1
   
-  if(!is.null(categorical_covariates))
-    categorical_indexes <- (which(colnames(embedded_series) %in% categorical_covariates)) - 1
-  else
-    categorical_indexes <- NULL
+  categorical_indexes <- NULL
+  
+  if(!is.null(categorical_covariates)){
+    if(is.null(numerical_covariates))
+      categorical_indexes <- (lag+1):ncol(final_lags)
+    else
+      categorical_indexes <- (lag+1):(ncol(final_lags) - length(numerical_covariates))
+  }
+    
   
   for(d in 1:depth){
     print(paste0("Depth: ", d))
@@ -85,13 +91,13 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
           else
             lg <- 1
           
-          if(!is.null(categorical_covariates) & !is.null(categorical_indexes) & (lg %in% categorical_indexes))
-            ths <- as.numeric(as.character(unique(node_data[[n]][,lg+1])))
+          if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
+            ths <- 1
           else  
             ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
           
           for(ids in 1:length(ths)){
-            cost <- SS(ths[ids], node_data[[n]], lg, categorical_covariates)
+            cost <- SS(ths[ids], node_data[[n]], lg)
             
             if(cost <= best_cost) { # find th which minimizes the squared errors
               best_cost <- cost;
@@ -104,13 +110,13 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
             print(paste0("Lag ", lg))
             
             # print("Start hyperparameter tuning with grid search")
-            if(!is.null(categorical_covariates) & !is.null(categorical_indexes) & (lg %in% categorical_indexes))
-              ths <- as.numeric(as.character(unique(node_data[[n]][,lg+1])))
+            if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
+              ths <- 1
             else 
               ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
             
             for(ids in 1:length(ths)){
-              cost <- SS(ths[ids], node_data[[n]], lg, categorical_covariates)
+              cost <- SS(ths[ids], node_data[[n]], lg)
               
               if(cost <= best_cost) { # find th which minimizes the squared errors
                 best_cost <- cost;
@@ -122,14 +128,14 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
         }
         
         if(best_cost != Inf){
-          splited_nodes <- create_split(node_data[[n]], th_lag, th, categorical_covariates)
+          splited_nodes <- create_split(node_data[[n]], th_lag, th)
           
           if(stopping_criteria == "lin_test")
-            is_significant <- check_linearity(node_data[[n]], splited_nodes, ncol(embedded_series) - 1, significance, categorical_covariates)
+            is_significant <- check_linearity(node_data[[n]], splited_nodes, ncol(embedded_series) - 1, significance)
           else if(stopping_criteria == "error_imp")
-            is_significant <- check_error_improvement(node_data[[n]], splited_nodes, error_threshold, categorical_covariates)
+            is_significant <- check_error_improvement(node_data[[n]], splited_nodes, error_threshold)
           else if(stopping_criteria == "both")
-            is_significant <- check_linearity(node_data[[n]], splited_nodes, ncol(embedded_series) - 1, significance, categorical_covariates) & check_error_improvement(node_data[[n]], splited_nodes, error_threshold, categorical_covariates) 
+            is_significant <- check_linearity(node_data[[n]], splited_nodes, ncol(embedded_series) - 1, significance) & check_error_improvement(node_data[[n]], splited_nodes, error_threshold) 
           
           if(is_significant){
             level_th_lags <- c(level_th_lags, th_lag)
@@ -189,18 +195,21 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     
     # Train a linear model per each leaf node
     for(ln in 1:length(leaf_nodes)){
-      leaf_trained_models[[ln]] <- fit_global_model(leaf_nodes[[ln]], NULL, categorical_covariates)[["model"]] 
+      leaf_trained_models[[ln]] <- fit_global_model(leaf_nodes[[ln]], NULL)[["model"]] 
       num_of_leaf_instances <- c(num_of_leaf_instances, nrow(leaf_nodes[[ln]]))
     }
   }else{
-    final_trained_model <- fit_global_model(embedded_series, NULL, categorical_covariates)[["model"]]
+    final_trained_model <- fit_global_model(embedded_series, NULL)[["model"]]
   }
   
   
   file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_setar_", stopping_criteria)
   
-  if(!is.null(categorical_covariates) | !is.null(numerical_covariates))
-    file_name <- paste0(file_name, "_with_covariates")
+  if(!is.null(numerical_covariates))
+    file_name <- paste0(file_name, "_numerical_covariates")
+  
+  if(!is.null(categorical_covariates))
+    file_name <- paste0(file_name, "_with_one_hot_encoding")
   
   if(fixed_lag)
     file_name <- paste0(file_name, "_fixed_lag")
@@ -229,20 +238,10 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     
     if(length(tree) > 0){
       for(f in 1:nrow(final_lags)){
-        pred_instance <- final_lags[f,]
-        leaf_index <- get_leaf_index(final_lags[f,], th_lags, thresholds, categorical_covariates)
+        leaf_index <- get_leaf_index(final_lags[f,], th_lags, thresholds)
         leaf_model <- leaf_trained_models[[leaf_index]]
         
-        if(!is.null(categorical_covariates)){
-          check_result <- check_leaf_data_matching(leaf_nodes[[leaf_index]], pred_instance, categorical_covariates)
-          pred_instance <- check_result[[2]]
-
-          if(check_result[[3]]){
-            leaf_model <- fit_global_model(check_result[[1]], NULL, categorical_covariates)[["model"]]
-          }
-        }
-        
-        horizon_predictions <- c(horizon_predictions, predict.glm(object = leaf_model, newdata = as.data.frame(pred_instance))) 
+        horizon_predictions <- c(horizon_predictions, predict.glm(object = leaf_model, newdata = as.data.frame(final_lags[f,]))) 
       }
     }else{
       horizon_predictions <- predict.glm(object = final_trained_model, newdata = as.data.frame(final_lags))
@@ -260,8 +259,13 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
       
       if(!is.null(categorical_covariates)){
         for(cat_cov in categorical_covariates){
-          final_lags[[cat_cov]] <- test_set[[cat_cov]][, (h+1)]
-          final_lags[[cat_cov]] <- as.factor(final_lags[[cat_cov]])
+          if(cat_unique_vals[[cat_cov]] > 2){
+            new_cat_cov_final_lags <- do_one_hot_encoding(test_set[[cat_cov]][, (h+1)], cat_unique_vals[[cat_cov]], cat_cov)
+            final_lags[,colnames(new_cat_cov_final_lags)] <- new_cat_cov_final_lags
+          }else{
+            final_lags[[cat_cov]] <- test_set[[cat_cov]][, (h+1)]
+          }
+          
         }
       }
       
@@ -363,16 +367,6 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
 
 
 
-# Restaurant Visitors
-# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both")
-# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test")
-# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp")
-# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-
-
-
 # Kaggle Daily
 # do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 74, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
 # do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
@@ -388,10 +382,9 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
 # do_setar_forecasting("kaggle_web_traffic_997_dataset.tsf", 10, 59, "kaggle_daily_997", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
 
 
-# Need to run
-do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
-do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
-do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
 
 # do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "both")
 # do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "lin_test")
@@ -403,6 +396,21 @@ do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_da
 
 
 
+# Restaurant Visitors
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both")
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test")
+# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp")
+
+# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+
+do_setar_forecasting("restaurant_visitors_60_dataset.tsf", 20, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both")
+
+do_setar_forecasting("restaurant_60_with_corvariates.tsf", 20, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+
+
+
 # Favourita Sales
 # do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "both")
 # do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.001)
@@ -410,10 +418,9 @@ do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_da
 # do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "error_imp", error_threshold = 0.001)
 
 
-# Need to run
-do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
-do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
-do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+# do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
 
 # do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "both")
 # do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "lin_test")
@@ -422,6 +429,8 @@ do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favour
 # do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
 # do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
 # do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+
+
 
 
 

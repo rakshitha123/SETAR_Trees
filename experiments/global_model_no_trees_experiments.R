@@ -17,7 +17,7 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon, categorical_covariates, numerical_covariates, series_prefix, splitter)
   training_set <- loaded_data[[1]]
   test_set <- loaded_data[[2]]
-  seasonality <- loaded_data[[3]]
+  seasonality <- loaded_data[[4]]
   
   # Start timestamp
   start_time <- Sys.time()
@@ -72,6 +72,9 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
 # do_global_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000_dates", method_name = "pooled_regression", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
 # do_global_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000_dates", method_name = "pooled_regression", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
+# do_global_forecasting("restaurant_visitors_60_dataset.tsf", 20, 39, "restaurant_60", method_name = "pooled_regression", index = NULL, integer_conversion = T)
+# do_global_forecasting("restaurant_60_with_corvariates.tsf", 20, 39, "restaurant_60", method_name = "pooled_regression", index = NULL, integer_conversion = T, categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+
 
 
 # CatBoost
@@ -95,6 +98,11 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
 
 # do_global_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000_dates", method_name = "catboost", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
 # do_global_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000_dates", method_name = "catboost", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+
+# do_global_forecasting("restaurant_visitors_60_dataset.tsf", 20, 39, "restaurant_60", method_name = "catboost", index = NULL, integer_conversion = T)
+# do_global_forecasting("restaurant_60_with_corvariates.tsf", 20, 39, "restaurant_60", method_name = "catboost", index = NULL, integer_conversion = T, categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+
+do_global_forecasting("favourita_1000_with_corvariates.tsf", 10, 16, "favourita_1000", method_name = "catboost", index = NULL, categorical_covariates = c("onpromotion", "family", "perishable", "city") , series_prefix = "T")
 
 
 
@@ -120,6 +128,9 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
 # do_global_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000_dates", method_name = "lightgbm", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
 # do_global_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000_dates", method_name = "lightgbm", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
+# do_global_forecasting("restaurant_visitors_60_dataset.tsf", 20, 39, "restaurant_60", method_name = "lightgbm", index = NULL, integer_conversion = T)
+# do_global_forecasting("restaurant_60_with_corvariates.tsf", 20, 39, "restaurant_60", method_name = "lightgbm", index = NULL, integer_conversion = T, categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+
 
 
 # XGBoost
@@ -143,6 +154,9 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
 
 # do_global_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000_dates", method_name = "xgboost", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
 # do_global_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000_dates", method_name = "xgboost", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+
+# do_global_forecasting("restaurant_visitors_60_dataset.tsf", 20, 39, "restaurant_60", method_name = "xgboost", index = NULL, integer_conversion = T)
+# do_global_forecasting("restaurant_60_with_corvariates.tsf", 20, 39, "restaurant_60", method_name = "xgboost", index = NULL, integer_conversion = T, categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
 
 
 
@@ -168,6 +182,9 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
 # do_global_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000_dates", method_name = "rf", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
 # do_global_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000_dates", method_name = "rf", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
+# do_global_forecasting("restaurant_visitors_60_dataset.tsf", 20, 39, "restaurant_60", method_name = "rf", index = NULL, integer_conversion = T)
+# do_global_forecasting("restaurant_60_with_corvariates.tsf", 20, 39, "restaurant_60", method_name = "rf", index = NULL, integer_conversion = T, categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+
 
 
 # FFNN
@@ -187,11 +204,14 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
 
 # do_global_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", method_name = "ffnn", index = NULL, integer_conversion = T, categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
 
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "ffnn", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "ffnn", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+# do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "ffnn", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+# do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "ffnn", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
 # do_global_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000_dates", method_name = "ffnn", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
 # do_global_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000_dates", method_name = "ffnn", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+
+# do_global_forecasting("restaurant_visitors_60_dataset.tsf", 20, 39, "restaurant_60", method_name = "ffnn", index = NULL, integer_conversion = T)
+# do_global_forecasting("restaurant_60_with_corvariates.tsf", 20, 39, "restaurant_60", method_name = "ffnn", index = NULL, integer_conversion = T, categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
 
 
 
