@@ -1,5 +1,7 @@
 # SETAR tree helper functions
 
+
+# A function to split a parent node into child nodes
 create_split <- function(data, conditional_lag, threshold){
   
   left_node <- data[data[,(conditional_lag + 1)] < threshold,]
@@ -9,16 +11,18 @@ create_split <- function(data, conditional_lag, threshold){
 }
 
 
+# A function to traverse through the tree based on the used thresholds and lags during splitting
 tree_traverse <- function(instance, split, threshold){
   direction <- "left"
   
-  if(instance[,split] >= threshold)  #[[paste0("Lag", split)]]
+  if(instance[,split] >= threshold)  
     direction <- "right"
   
   direction
 }
 
 
+# A function to identify the leaf node corresponding with a given test instance
 get_leaf_index <- function(instance, splits, thresholds){
   current_split <- 1
   divide_factor <- 2
@@ -63,7 +67,7 @@ get_leaf_index <- function(instance, splits, thresholds){
 }
 
 
-# Sum of squares function
+# A function to calculate Sum of Squared Errors (SSE)
 SS <- function(p, train_data, current_lg) {
   splitted_nodes <- create_split(train_data, current_lg, p)
   
@@ -83,6 +87,7 @@ SS <- function(p, train_data, current_lg) {
 }
 
 
+# A function to check whether there exists a remaining non-linearity in the parent node instances
 check_linearity <- function(parent_node, child_nodes, lag, significance){
   print("lin test")
   
@@ -115,6 +120,7 @@ check_linearity <- function(parent_node, child_nodes, lag, significance){
 }
 
 
+# A function to check whether a considerable error reduction (depends on error threshold) can be gained by splitting a parent node into child nodes
 check_error_improvement <- function(parent_node, child_nodes, error_threshold){
   print("error improvement")
   

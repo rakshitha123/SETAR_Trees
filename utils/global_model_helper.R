@@ -1,4 +1,7 @@
-# Creating embedded matrix and final lags to train the global models
+# Global model helper functions
+
+
+# A function to create embedded matrix and final lags to train the global models
 create_input_matrix <- function(training_set, lag, scale = FALSE, test_set = NULL, categorical_covariates = NULL, numerical_covariates = NULL){
   embedded_series <- NULL
   final_lags <- NULL
@@ -16,7 +19,7 @@ create_input_matrix <- function(training_set, lag, scale = FALSE, test_set = NUL
       series_means <- c(series_means, mean)
       
       if(scale)
-        time_series <- time_series / mean
+        time_series <- time_series / mean # If requires, do mean normalization
     }else
       series_means <- c(series_means, 1)
     
@@ -57,7 +60,7 @@ create_input_matrix <- function(training_set, lag, scale = FALSE, test_set = NUL
       }
     }
     
-    # Add categorical covariates
+    # Add numerical covariates
     if(!is.null(numerical_covariates)){
       for(num_cov in numerical_covariates){
         num_cov_final_lags <- test_set[[num_cov]][i, 1]
@@ -95,7 +98,7 @@ create_input_matrix <- function(training_set, lag, scale = FALSE, test_set = NUL
 }
 
 
-# Creating embedded matrix and final lags to train the setar tree model
+# A function to create embedded matrix and final lags to train the SETAR tree model
 create_tree_input_matrix <- function(training_set, lag, scale = FALSE, test_set = NULL, categorical_covariates = NULL, numerical_covariates = NULL, cat_unique_vals = NULL){
   embedded_series <- NULL
   final_lags <- NULL
@@ -113,7 +116,7 @@ create_tree_input_matrix <- function(training_set, lag, scale = FALSE, test_set 
       series_means <- c(series_means, mean)
       
       if(scale)
-        time_series <- time_series / mean
+        time_series <- time_series / mean # If requires, do mean normalization
     }else
       series_means <- c(series_means, 1)
     
@@ -170,7 +173,7 @@ create_tree_input_matrix <- function(training_set, lag, scale = FALSE, test_set 
       }
     }
     
-    # Add categorical covariates
+    # Add numerical covariates
     if(!is.null(numerical_covariates)){
       for(num_cov in numerical_covariates){
         num_cov_final_lags <- test_set[[num_cov]][i, 1]
@@ -201,7 +204,7 @@ create_tree_input_matrix <- function(training_set, lag, scale = FALSE, test_set 
 }
 
 
-# Creating a formula to train a model
+# A function to create a formula to train a model
 create_formula <- function(data){
   formula <- "y ~ "
   for(predictor in 2:ncol(data)){
@@ -216,9 +219,9 @@ create_formula <- function(data){
 }
 
 
-# Creating training and test sets
+# A function to create training and test sets
 create_train_test_sets <- function(input_file_name, key, index, forecast_horizon, categorical_covariates = NULL, numerical_covariates = NULL, series_prefix = NULL, splitter = "_"){
-  loaded_data <- convert_tsf_to_tsibble(file.path(DATASET_DIR, "tsf_data", input_file_name, fsep = "/"), VALUE_COL_NAME, key, index)
+  loaded_data <- convert_tsf_to_tsibble(file.path(BASE_DIR, "datasets", input_file_name, fsep = "/"), VALUE_COL_NAME, key, index)
   dataset <- loaded_data[[1]]
   frequency <- loaded_data[[2]]
   
@@ -291,7 +294,7 @@ split_data <- function(input, forecast_horizon){
 }
 
 
-# Fitting a global regression model
+# A function to fit a global regression model
 fit_global_model <- function(fitting_data, test_data = NULL) {
   model <- glm(formula = create_formula(fitting_data), data = fitting_data)
   
@@ -304,28 +307,7 @@ fit_global_model <- function(fitting_data, test_data = NULL) {
 }
 
 
-# check_leaf_data_matching <- function(leaf_data, instance, categorical_covariates){
-# 
-#   changed_leaf <- FALSE
-#   
-#   for(cat in categorical_covariates){
-#     if(cat %in% colnames(leaf_data)){
-#       if(nlevels(leaf_data[[cat]]) == 1)
-#         instance[[cat]] <- as.numeric(instance[[cat]])
-#       
-#       if(!(instance[[cat]] %in% as.numeric(levels(leaf_data[[cat]])))){
-#         leaf_data[[cat]] <- as.numeric(leaf_data[[cat]])
-#         instance[[cat]] <- as.numeric(instance[[cat]])
-#         changed_leaf <- TRUE
-#       }
-#     }
-#   }
-#   
-#   list("leaf_data" = leaf_data, "instance" = instance, "changed_leaf"  = changed_leaf)
-#   
-# }
-
-
+# A function to convert categorical covariates into one-hot encoding format
 do_one_hot_encoding <- function(input_series, num_cats, cat_cov){
   output <- matrix(0, nrow = length(input_series), ncol = num_cats - 1)
   
@@ -339,10 +321,3 @@ do_one_hot_encoding <- function(input_series, num_cats, cat_cov){
   
   output
 }
-
-
-
-
-
-
-

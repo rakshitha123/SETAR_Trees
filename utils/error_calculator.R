@@ -23,7 +23,7 @@ calculate_smape <- function(forecasts, test_set){
 # forecasts - a matrix containing forecasts for a set of series
 #             no: of rows should be equal to number of series and no: of columns should be equal to the forecast horizon 
 # test_set - a matrix with the same dimensions as 'forecasts' containing the actual values corresponding with them
-# training_set - a matrix containing the training series
+# training_set - a list containing the training series
 # seasonality - frequency of the dataset, e.g. 12 for monthly
 calculate_mase <- function(forecasts, test_set, training_set, seasonality){
   mase_per_series = NULL
@@ -42,6 +42,15 @@ calculate_mase <- function(forecasts, test_set, training_set, seasonality){
 }
 
 
+# A wrapper function to calculate sMAPE and MASE
+#
+# Parameters
+# forecasts - a matrix containing forecasts for a set of series
+#             no: of rows should be equal to number of series and no: of columns should be equal to the forecast horizon 
+# test_set - a matrix with the same dimensions as 'forecasts' containing the actual values corresponding with them
+# training_set - a list containing the training series
+# seasonality - frequency of the dataset, e.g. 12 for monthly
+# file_name - Name (prefix) of the file that should be used to store errors
 calculate_errors <- function(forecasts, test_set, training_set, seasonality, file_name){
   #calculating smape
   smape_per_series <- calculate_smape(forecasts, test_set)
@@ -49,6 +58,7 @@ calculate_errors <- function(forecasts, test_set, training_set, seasonality, fil
   #calculating mase
   mase_vector <- calculate_mase(forecasts, test_set, training_set, seasonality)
  
+  dir.create(file.path(BASE_DIR, "results", "errors", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
   write.table(smape_per_series, file.path(BASE_DIR, "results", "errors", paste0(file_name, "_smape_errors.txt")), row.names = F, col.names = F, quote = F)
   write.table(mase_vector, file.path(BASE_DIR, "results", "errors", paste0(file_name, "_mase_errors.txt")), row.names = F, col.names = F, quote = F)
   

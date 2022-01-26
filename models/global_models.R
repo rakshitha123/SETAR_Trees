@@ -5,6 +5,7 @@ library(catboost)
 library(nnet)
 library(lightgbm)
 library(xgboost)
+library(rpart)
 
 set.seed(1)
 
@@ -31,7 +32,7 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
   # Create the formula
   formula <- create_formula(fitting_data)
   
-  # Fit the pooled regression model
+  # Fit the global models
   if(method == "pooled_regression")
     model <- glm(formula = formula, data = fitting_data)
   else if(method == "catboost"){
@@ -42,6 +43,8 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
       train_pool <- catboost.load_pool(data = fitting_data[-1], label = as.matrix(fitting_data[,1]), cat_features = cat_feature_indexes - 1)
     }
     model <- catboost.train(train_pool)
+  }else if(method == "regression_tree"){
+    model <- rpart(formula = formula, data = fitting_data, method  = "anova")
   }else if(method == "ffnn"){
     # Define parameters grid to tune hyperparameters
     parameters_df = expand.grid(size = seq(10, 60, 10), decay = seq(0.01, 0.1, 0.01))
@@ -103,8 +106,9 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
                                          boosting_type = "rf",
                                          learning_rate = parameters_df$learning_rate[row],
                                          min_data_in_leaf = parameters_df$min_data_in_leaf[row],
-                                         bagging_freq = 1,
-                                         bagging_fraction = 0.5,
+                                         bagging_freq = 10,
+                                         bagging_fraction = 0.8,
+                                         feature_fraction = 1,
                                          early_stopping_rounds = 30,
                                          n_estimators = 400))
         }else{
@@ -115,8 +119,9 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
                                           boosting_type = "rf",
                                           learning_rate = parameters_df$learning_rate[row],
                                           min_data_in_leaf = parameters_df$min_data_in_leaf[row],
-                                          bagging_freq = 1,
-                                          bagging_fraction = 0.5,
+                                          bagging_freq = 10,
+                                          bagging_fraction = 0.8,
+                                          feature_fraction = 1,
                                           n_estimators = 400))
         }
       }
@@ -161,8 +166,9 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
                                         boosting_type = "rf",
                                         learning_rate = optimised_parameters$learning_rate,
                                         min_data_in_leaf = optimised_parameters$min_data_in_leaf,
-                                        bagging_freq = 1,
-                                        bagging_fraction = 0.5,
+                                        bagging_freq = 10,
+                                        bagging_fraction = 0.8,
+                                        feature_fraction = 1,
                                         early_stopping_rounds = 30,
                                         n_estimators = 400)) 
       }else{
@@ -173,8 +179,9 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
                                           boosting_type = "rf",
                                           learning_rate = optimised_parameters$learning_rate,
                                           min_data_in_leaf = optimised_parameters$min_data_in_leaf,
-                                          bagging_freq = 1,
-                                          bagging_fraction = 0.5,
+                                          bagging_freq = 10,
+                                          bagging_fraction = 0.8,
+                                          feature_fraction = 1,
                                           n_estimators = 400))
       }
     }
@@ -243,7 +250,7 @@ forec_recursive <- function(train_data, lag, model, final_lags, forecast_horizon
       }
       
       new_predictions <- catboost.predict(model, catboost_final_lags)
-    }else if(method == "ffnn")
+    }else if(method == "ffnn" | method == "regression_tree")
       new_predictions <- predict(model, as.data.frame(final_lags))
     
     else if(method == "lightgbm" | method == "rf"){
@@ -264,6 +271,7 @@ forec_recursive <- function(train_data, lag, model, final_lags, forecast_horizon
       final_lags <- cbind(new_predictions, final_lags)
       colnames(final_lags)[1:lag] <- paste("Lag", 1:lag, sep="")
       
+      # Updating categorical covariates for the next horizon
       if(!is.null(categorical_covariates)){
         for(cat_cov in categorical_covariates){
           final_lags[[cat_cov]] <- test_set[[cat_cov]][, (i+1)]
@@ -271,6 +279,7 @@ forec_recursive <- function(train_data, lag, model, final_lags, forecast_horizon
         }
       }
       
+      # Updating numerical covariates for the next horizon
       if(!is.null(numerical_covariates)){
         for(num_cov in numerical_covariates)
           final_lags[[num_cov]] <- test_set[[num_cov]][, (i+1)]

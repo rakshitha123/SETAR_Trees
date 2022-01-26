@@ -1,33 +1,34 @@
-# BASE_DIR <- "C:/Projects/SETAR_Trees/"
-BASE_DIR <- "/home/rakshitha/Trees/"
+BASE_DIR <- "SETAR_Trees"
 
 source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 
 
-# input_file_name <- "rossmann_data_with_corvariates.tsf"
-# lag <- 10
-# key <- "series_name"
-# index <- NULL
-# forecast_horizon <- 48
-# dataset_name = "rossmann"
-# integer_conversion = T
-# depth = 2
-# significance = 0.05
-# scale = FALSE
-# seq_significance = T
-# significance_divider = 2
-# error_threshold = 0.03
-# stopping_criteria = "both"
-# fixed_lag = FALSE
-# external_lag = 0
-# categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday")
-# numerical_covariates = "Customers"
-# series_prefix = "T"
-# splitter = "_"
+# Function to execute SETAR tree
 
-
-do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 2, key = "series_name", index = "start_timestamp", integer_conversion = F, significance = 0.05, scale = FALSE, seq_significance = TRUE, significance_divider = 2, error_threshold = 0.03, stopping_criteria = "both", fixed_lag = FALSE, external_lag = 0, categorical_covariates = NULL, numerical_covariates = NULL, series_prefix = NULL, splitter = "_"){
+# Parameters
+# input_file_name - .tsf file name
+# lag - The number of past lags that should be considered during training
+# forecast_horizon - The expected forecast horizon
+# dataset_name - Name of the dataset
+# depth - Maximum tree depth. This is 1000 by default and thus, the depth will be actually controlled by the stopping criterias unless you specificed a lower value
+# key - The name of the attribute that should be used as the key when creating the tsibble from the .tsf file. If doesn't provide, a data frame will be returned instead of a tsibble
+# index - The name of the time attribute that should be used as the index when creating the tsibble from the .tsf file. If doesn't provide, it will search for a valid index. When no valid index found, a data frame will be returned instead of a tsibble
+# integer_conversion - Whether the final forecasts should be rounded or not
+# significance - Initial significance used by the linearity test (alpha_0)
+# scale - Whether the series should be normalized before training. When TRUE, mean normalization is applied to each series
+# seq_significance - Whether the significance used by the linearity test is reduced in each tree level
+# significance_divider - If sequence significance is used, then in each tree level, the current significance will be divided by this value
+# error_threshold - The minimum error reduction percentage between parent and child nodes to make a split
+# stopping_criteria - The required stopping criteria: linearity test (lin_test), error reduction percentage (error_imp), linearity test and error reduction percentage (both)
+# fixed_lag - Whether the split should be done using a fixed lag. Otherwise, the optimal lag will be found for each split
+# external_lag - If fixed_lag=TRUE, users can specify a lag which should be used for splitting
+# categorical_covariates - A vector containing the names of external categorical covariates. The .tsf file should contain series corresponding with each categorical covariate
+# numerical_covariates - A vector containing the names of external numerical covariates. The .tsf file should contain series corresponding with each numerical covariate
+# series_prefix - The prefix used to identify original time series in the .tsf file. This is only required when the models are trained with external covariates
+# splitter - The splitter used in the names of time series in the .tsf file to separate the series type and number. This is only required when the models are trained with external covariates
+do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 1000, key = "series_name", index = "start_timestamp", integer_conversion = FALSE, significance = 0.05, scale = FALSE, seq_significance = TRUE, significance_divider = 2, error_threshold = 0.03, stopping_criteria = "both", fixed_lag = FALSE, external_lag = 0, categorical_covariates = NULL, numerical_covariates = NULL, series_prefix = NULL, splitter = "_"){
   
+  # Creating training and test sets
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon, categorical_covariates, numerical_covariates, series_prefix, splitter)
   training_set <- loaded_data[[1]]
   test_set <- loaded_data[[2]]
@@ -44,21 +45,22 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   start_time <- Sys.time()
   
   
-  # Set list of defaults:
-  start.con <- list(nTh = 15)
+  # Set list of defaults
+  start.con <- list(nTh = 15) # Number of thresholds considered when making each split to define the optimal lag
   
   
-  tree <- list()
-  th_lags <- list()
-  thresholds <- list()
+  tree <- list() # Stores the nodes in tree in each level
+  th_lags <- list() # Stores the optimal lags used during splitting
+  thresholds <- list() # Stores the optimal thresholds used during splitting
   level_errors <- NULL
   
-  node_data <- list(embedded_series)
+  node_data <- list(embedded_series) # Root node contains the training instances coming from all series
   
   split_info <- 1
   
   categorical_indexes <- NULL
   
+  # Identify the column indexes of covariates in the test set
   if(!is.null(categorical_covariates)){
     if(is.null(numerical_covariates))
       categorical_indexes <- (lag+1):ncol(final_lags)
@@ -96,10 +98,10 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
           else  
             ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
           
-          for(ids in 1:length(ths)){
+          for(ids in 1:length(ths)){ # When the lag is fixed, algorithm will only find the optimal threshold for splitting
             cost <- SS(ths[ids], node_data[[n]], lg)
             
-            if(cost <= best_cost) { # find th which minimizes the squared errors
+            if(cost <= best_cost) { # Find th which minimizes the squared errors
               best_cost <- cost;
               th <- ths[ids]
               th_lag <- lg
@@ -109,7 +111,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
           for(lg in 1:(ncol(embedded_series) - 1)){
             print(paste0("Lag ", lg))
             
-            # print("Start hyperparameter tuning with grid search")
+            # Finding optimal lag and threshold that should be used for splitting
             if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
               ths <- 1
             else 
@@ -118,7 +120,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
             for(ids in 1:length(ths)){
               cost <- SS(ths[ids], node_data[[n]], lg)
               
-              if(cost <= best_cost) { # find th which minimizes the squared errors
+              if(cost <= best_cost) { # Find th and th_lag which minimizes the squared errors
                 best_cost <- cost;
                 th <- ths[ids]
                 th_lag <- lg
@@ -128,8 +130,9 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
         }
         
         if(best_cost != Inf){
-          splited_nodes <- create_split(node_data[[n]], th_lag, th)
+          splited_nodes <- create_split(node_data[[n]], th_lag, th) # Get the child nodes
           
+          # Check whether making the split is worth enough
           if(stopping_criteria == "lin_test")
             is_significant <- check_linearity(node_data[[n]], splited_nodes, ncol(embedded_series) - 1, significance)
           else if(stopping_criteria == "error_imp")
@@ -137,7 +140,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
           else if(stopping_criteria == "both")
             is_significant <- check_linearity(node_data[[n]], splited_nodes, ncol(embedded_series) - 1, significance) & check_error_improvement(node_data[[n]], splited_nodes, error_threshold) 
           
-          if(is_significant){
+          if(is_significant){ # Split the node into child nodes only if making that split is worth enough
             level_th_lags <- c(level_th_lags, th_lag)
             level_thresholds <- c(level_thresholds, th)
             level_split_info <- c(level_split_info, rep(1, 2))
@@ -180,13 +183,14 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
       node_data <- tree[[d]]
       split_info <- level_split_info
       
-      if(seq_significance)
+      if(seq_significance) # Defining the significance for the next level of the tree
         significance <- significance/significance_divider
     }else
-      break
+      break # If all nodes in a particular tree level are not further splitted, then stop
   }
   
   
+  # Model training
   # Check whether the tree has any nodes. If not, train a single pooled regression model
   if(length(tree) > 0){
     leaf_nodes <- tree[[length(tree)]]
@@ -217,13 +221,14 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   if(stopping_criteria != "lin_test")
     file_name <- paste0(file_name, "_error_threshold_", error_threshold)
   
-  # if(seq_significance)
-  #   file_name <- paste0(file_name, "_seq_significance_", significance_divider)
+  if(seq_significance)
+   file_name <- paste0(file_name, "_seq_significance_", significance_divider)
   
   if(scale)
     file_name <- paste0(file_name, "_with_scaling")
   
-  if(length(tree) > 0){
+  if(length(tree) > 0){ # Recording tree information such as the tree depth and number of nodes in the leaf level
+    dir.create(file.path(BASE_DIR, "results", "tree_info", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
     write(paste("No: of nodes in leaf level:", length(leaf_nodes)), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = T)
     write(paste("Tree depth:", length(tree)), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = T)
     write.table(num_of_leaf_instances, file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), row.names = F, col.names = F, quote = F, append = T)
@@ -238,7 +243,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     
     if(length(tree) > 0){
       for(f in 1:nrow(final_lags)){
-        leaf_index <- get_leaf_index(final_lags[f,], th_lags, thresholds)
+        leaf_index <- get_leaf_index(final_lags[f,], th_lags, thresholds) # Identify the leaf node corresponding with a given test instance
         leaf_model <- leaf_trained_models[[leaf_index]]
         
         horizon_predictions <- c(horizon_predictions, predict.glm(object = leaf_model, newdata = as.data.frame(final_lags[f,]))) 
@@ -257,6 +262,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
       final_lags <- cbind(horizon_predictions, final_lags)
       colnames(final_lags)[1:lag] <- paste("Lag", 1:lag, sep="")
       
+      # Updating categorical covariates for the next horizon
       if(!is.null(categorical_covariates)){
         for(cat_cov in categorical_covariates){
           if(cat_unique_vals[[cat_cov]] > 2){
@@ -269,6 +275,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
         }
       }
       
+      # Updating numerical covariates for the next horizon
       if(!is.null(numerical_covariates)){
         for(num_cov in numerical_covariates)
           final_lags[[num_cov]] <- test_set[[num_cov]][, (h+1)]
@@ -288,8 +295,8 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   if(integer_conversion)
     forecasts <- round(forecasts)
   
-  
-  write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", "setar", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
+  dir.create(file.path(BASE_DIR, "results", "forecasts", "setar_tree", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
+  write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", "setar_tree", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
   
   print(th_lags)
   print(thresholds)
@@ -299,179 +306,69 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     print(paste0("Insignificant node count = ", length(tree[[length(tree) - 1]]) - level_significant_node_count))
   
   # Execution time
+  dir.create(file.path(BASE_DIR, "results", "execution_times", "setar_tree", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
   exec_time <- end_time - start_time
   print(exec_time)
-  write(paste(exec_time, attr(exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", paste0(file_name, ".txt"), fsep = "/"), append = FALSE)
+  write(paste(exec_time, attr(exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", "setar_tree", paste0(file_name, ".txt"), fsep = "/"), append = FALSE)
   
+  # Error calculations
   calculate_errors(forecasts, test_set$series, training_set$series, seasonality, file_name)
 }
+
 
 
 # Experiments
 
 # Chaotic Logistic
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1, index = NULL, significance = 0.001, tune_method = "genoud")
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 4, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 5, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 6, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 7, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 8, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 9, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 10, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, significance = 0.001)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, significance = 0.05, seq_significance = TRUE)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, stopping_criteria = "error_imp", error_threshold = 0.03)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", depth = 1000, index = NULL, stopping_criteria = "lin_test", fixed_lag = T)
+do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, stopping_criteria = "lin_test")
+do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, stopping_criteria = "error_imp")
+do_setar_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, stopping_criteria = "both")
 
 
-
-# Mackey glass
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1, index = NULL, significance = 0.001)
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 4, index = NULL, significance = 0.001)
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 6, index = NULL, significance = 0.001)
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 10, index = NULL, significance = 0.001)
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, significance = 0.001)
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, significance = 0.05, seq_significance = TRUE)
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, stopping_criteria = "error_imp", error_threshold = 0.03)
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", depth = 1000, index = NULL, stopping_criteria = "lin_test", fixed_lag = T)
-
+# Mackey-Glass
+do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, stopping_criteria = "lin_test")
+do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, stopping_criteria = "error_imp")
+do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, stopping_criteria = "both")
 
 
 # Tourism Quarterly
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1, significance = 0.001)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 6, significance = 0.001)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 10, significance = 0.001)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, significance = 0.001)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, significance = 0.05, seq_significance = TRUE)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, significance = 0.05, seq_significance = TRUE, significance_divider = 10)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, significance = 0.05, seq_significance = TRUE, significance_divider = 100)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, stopping_criteria = "error_imp", error_threshold = 0.03)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", depth = 1000, stopping_criteria = "lin_test", fixed_lag = T)
-
+do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", stopping_criteria = "lin_test")
+do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", stopping_criteria = "error_imp")
+do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", stopping_criteria = "both")
 
 
 # Rossmann
-# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 10, significance = 0.001)
-# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, significance = 0.05, seq_significance = TRUE)
-# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", error_threshold = 0.03)
-# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", fixed_lag = T)
+# Without covariates
+do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = TRUE, stopping_criteria = "lin_test")
+do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = TRUE, stopping_criteria = "error_imp")
+do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = TRUE, stopping_criteria = "both")
 
-# do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", depth = 1000, index = NULL, integer_conversion = T, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-# do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-# do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-
-
-
-# Kaggle Daily
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 74, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1, integer_conversion = T, significance = 0.001)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 4, integer_conversion = T, significance = 0.001)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 6, integer_conversion = T, significance = 0.001)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, significance = 0.001)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, significance = 0.05, seq_significance = TRUE)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, significance = 0.05, seq_significance = TRUE, significance_divider = 10)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, significance = 0.05, seq_significance = TRUE, significance_divider = 100)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", error_threshold = 0.03)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", fixed_lag = T)
-# do_setar_forecasting("kaggle_web_traffic_997_dataset.tsf", 10, 59, "kaggle_daily_997", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
+# With covariates
+do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", index = NULL, integer_conversion = TRUE, stopping_criteria = "lin_test", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", index = NULL, integer_conversion = TRUE, stopping_criteria = "error_imp", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", index = NULL, integer_conversion = TRUE, stopping_criteria = "both", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
 
 
-# do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
-# do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
-# do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+# Kaggle Web Traffic
+# Without covariates
+do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = TRUE, stopping_criteria = "lin_test")
+do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = TRUE, stopping_criteria = "error_imp")
+do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = TRUE, stopping_criteria = "both")
 
-# do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "both")
-# do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "lin_test")
-# do_setar_forecasting("kaggle_web_traffic_dataset_10000.tsf", 10, 59, "kaggle_daily_10000", depth = 1000, integer_conversion = T, stopping_criteria = "error_imp")
-
-# do_setar_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
-# do_setar_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
-# do_setar_forecasting("kaggle_10000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_10000", index = NULL, depth = 1000, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
-
+# With covariates
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, integer_conversion = TRUE, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, integer_conversion = TRUE, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, integer_conversion = TRUE, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
 
 
-# Restaurant Visitors
-# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both")
-# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test")
-# do_setar_forecasting("restaurant_visitors_dataset.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp")
+# Favourita 
+# Without covariates
+do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, stopping_criteria = "lin_test")
+do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, stopping_criteria = "error_imp")
+do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, stopping_criteria = "both")
 
-# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "lin_test", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-# do_setar_forecasting("restaurant_with_corvariates.tsf", 10, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "error_imp", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
+# With covariates
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
 
-do_setar_forecasting("restaurant_visitors_60_dataset.tsf", 20, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both")
-
-do_setar_forecasting("restaurant_60_with_corvariates.tsf", 20, 39, "restaurant", depth = 1000, index = NULL, integer_conversion = T, stopping_criteria = "both", categorical_covariates = c("AirGenreName", "AreaName", "DayofWeek", "HolidayFlag"), series_prefix = "T")
-
-
-
-# Favourita Sales
-# do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "both")
-# do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "both", error_threshold = 0.001)
-# do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "lin_test")
-# do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", depth = 1000, index = NULL, stopping_criteria = "error_imp", error_threshold = 0.001)
-
-
-# do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
-# do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
-# do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
-
-# do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "both")
-# do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "lin_test")
-# do_setar_forecasting("favourita_sales_10000_dataset.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "error_imp")
-
-# do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
-# do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
-# do_setar_forecasting("favourita_10000_with_date_corvariates.tsf", 10, 16, "favourita_10000", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Other datasets
-# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, significance = 0.001)
-# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, significance = 0.05, seq_significance = TRUE)
-# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, stopping_criteria = "error_imp", error_threshold = 0.01)
-# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("nn5_weekly_dataset.tsf", 10, 8, "nn5_weekly", depth = 1000, stopping_criteria = "lin_test", fixed_lag = T)
-
-# do_setar_forecasting("electricity_weekly_dataset.tsf", 10, 8, "electricity_weekly", depth = 1000, integer_conversion = T, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("m3_quarterly_dataset.tsf", 10, 8, "m3_quarterly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("m1_quarterly_dataset.tsf", 10, 8, "m1_quarterly", depth = 10, significance = 0.001)
-# do_setar_forecasting("traffic_weekly_dataset.tsf", 10, 8, "traffic_weekly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("m3_monthly_dataset.tsf", 15, 18, "m3_monthly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("m1_monthly_dataset.tsf", 15, 18, "m1_monthly", depth = 1000, stopping_criteria = "both", error_threshold = 0.03)
-# do_setar_forecasting("hospital_dataset.tsf", 15, 12, "hospital", depth = 1000, stopping_criteria = "both", error_threshold = 0.03, integer_conversion = T)
-
-
-# Walmart Store Sales
-# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "both")
-# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "lin_test")
-# do_setar_forecasting("walmart_store_sales_dataset.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "error_imp")
-
-# do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "both", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")
-# do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "lin_test", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")
-# do_setar_forecasting("walmart_data_with_corvariates.tsf", 10, 39, "walmart", depth = 1000, index = NULL, stopping_criteria = "error_imp", categorical_covariates = c("IsHoliday"), numerical_covariates = c("MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"), series_prefix = "T")
