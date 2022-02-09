@@ -17,10 +17,10 @@ The function parameters are explained in detail in the script.
 The forecasts, errors, execution times and tree related information (tree depth, number of nodes in the leaf level and number of instances per each leaf node) related to the SETAR-Tree model will be stored into "./results/forecasts/setar_tree", "./results/errors", "./results/execution_times/setar_tree" and "./results/tree_info" folders, respectively.
 See the examples provided in "./experiments/setar_tree_experiments.R" script for more details.
 
-## Executing the SETAR Forest Model
-You can directly execute the exepriments related to the proposed SETAR Forest model using the "do_setar_forest_forecasting" function implemented in "./experiments/setar_forest_experiments.R" script.
+## Executing the SETAR-Forest Model
+You can directly execute the exepriments related to the proposed SETAR-Forest model using the "do_setar_forest_forecasting" function implemented in "./experiments/setar_forest_experiments.R" script.
 The function parameters are explained in detail in the script. 
-The forecasts, errors and execution times related to the SETAR forest model will be stored into "./results/forecasts/setar_forest", "./results/errors" and "./results/execution_times/setar_forest" folders, respectively.
+The forecasts, errors and execution times related to the SETAR-Forest model will be stored into "./results/forecasts/setar_forest", "./results/errors" and "./results/execution_times/setar_forest" folders, respectively.
 See the examples provided in "./experiments/setar_forest_experiments.R" script for more details.
 
 ## Executing the Benchmark Models
