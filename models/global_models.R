@@ -6,6 +6,7 @@ library(nnet)
 library(lightgbm)
 library(xgboost)
 library(rpart)
+library(Cubist)
 
 set.seed(1)
 
@@ -45,6 +46,8 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
     model <- catboost.train(train_pool)
   }else if(method == "regression_tree"){
     model <- rpart(formula = formula, data = fitting_data, method  = "anova")
+  }else if(method == "cubist"){
+    model <- cubist(x = fitting_data[-1], y = fitting_data[,1])
   }else if(method == "ffnn"){
     # Define parameters grid to tune hyperparameters
     parameters_df = expand.grid(size = seq(10, 60, 10), decay = seq(0.01, 0.1, 0.01))
@@ -195,7 +198,7 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
       xgcv <- xgboost:::xgboost(data = data.matrix(fitting_data[-1]), 
                                 label = as.matrix(fitting_data[,1]), 
                                 booster = "gbtree",
-                                objective = "reg:squarederror",
+                                objective = "reg:linear",
                                 eval_metric = "rmse",
                                 max_depth = parameters_df$max_depth[row],
                                 eta = parameters_df$eta[row],
@@ -217,7 +220,7 @@ fit_model <- function(fitting_data, final_lags, method = "pooled_regression", ca
     model <- xgboost:::xgboost(data = data.matrix(fitting_data[-1]), 
                                label = as.matrix(fitting_data[,1]), 
                                booster = "gbtree",
-                               objective = "reg:squarederror",
+                               objective = "reg:linear",
                                eval_metric = "rmse",
                                max_depth = optimised_parameters$max_depth,
                                eta = optimised_parameters$eta,
@@ -250,9 +253,8 @@ forec_recursive <- function(train_data, lag, model, final_lags, forecast_horizon
       }
       
       new_predictions <- catboost.predict(model, catboost_final_lags)
-    }else if(method == "ffnn" | method == "regression_tree")
+    }else if(method == "ffnn" | method == "regression_tree" | method == "cubist")
       new_predictions <- predict(model, as.data.frame(final_lags))
-    
     else if(method == "lightgbm" | method == "rf"){
       if(is.null(categorical_covariates))
         new_predictions <- predict(model, as.matrix(final_lags))
