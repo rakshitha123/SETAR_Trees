@@ -9,7 +9,7 @@ source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 # input_file_name - .tsf file name
 # forecast_horizon - The expected forecast horizon
 # dataset_name - Name of the dataset
-# method - Name of the local model. Current supportive local model names: ets, arima, ses, theta
+# method - Name of the local model. Current supportive local model names: ets, arima, ses, theta, setar and star
 # key - The name of the attribute that should be used as the key when creating the tsibble from the .tsf file. If doesn't provide, a data frame will be returned instead of a tsibble
 # index - The name of the time attribute that should be used as the index when creating the tsibble from the .tsf file. If doesn't provide, it will search for a valid index. When no valid index found, a data frame will be returned instead of a tsibble
 # integer_conversion - Whether the final forecasts should be rounded or not
@@ -62,23 +62,47 @@ do_local_forecasting <- function(input_file_name, forecast_horizon, dataset_name
 # Chaotic Logistic
 do_local_forecasting("chaotic_logistic_dataset.tsf", 8, "chaotic_logistic", "ets", index = NULL)
 do_local_forecasting("chaotic_logistic_dataset.tsf", 8, "chaotic_logistic", "arima", index = NULL)
+do_local_forecasting("chaotic_logistic_dataset.tsf", 8, "chaotic_logistic", "setar", index = NULL)
+do_local_forecasting("chaotic_logistic_dataset.tsf", 8, "chaotic_logistic", "star", index = NULL)
 
 # Mackey-Glass
 do_local_forecasting("mackey_glass_dataset.tsf", 8, "mackey_glass", "ets", index = NULL)
 do_local_forecasting("mackey_glass_dataset.tsf", 8, "mackey_glass", "arima", index = NULL)
+do_local_forecasting("mackey_glass_dataset.tsf", 8, "mackey_glass", "setar", index = NULL)
+do_local_forecasting("mackey_glass_dataset.tsf", 8, "mackey_glass", "star", index = NULL)
 
 # Kaggle Web Traffic
 do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 59, "kaggle_daily", "ets", integer_conversion = TRUE)
 do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 59, "kaggle_daily", "arima", integer_conversion = TRUE)
+do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 59, "kaggle_daily", "setar", integer_conversion = TRUE)
+do_local_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 59, "kaggle_daily", "star", integer_conversion = TRUE)
 
 # Tourism Quarterly
 do_local_forecasting("tourism_quarterly_dataset.tsf", 8, "tourism_quarterly", "ets")
 do_local_forecasting("tourism_quarterly_dataset.tsf", 8, "tourism_quarterly", "arima")
+do_local_forecasting("tourism_quarterly_dataset.tsf", 8, "tourism_quarterly", "setar")
+do_local_forecasting("tourism_quarterly_dataset.tsf", 8, "tourism_quarterly", "star")
 
 # Rossmann
 do_local_forecasting("rossmann_dataset_without_missing_values.tsf", 48, "rossmann", "ets", integer_conversion = TRUE)
 do_local_forecasting("rossmann_dataset_without_missing_values.tsf", 48, "rossmann", "arima", integer_conversion = TRUE)
+do_local_forecasting("rossmann_dataset_without_missing_values.tsf", 48, "rossmann", "setar", integer_conversion = TRUE)
+do_local_forecasting("rossmann_dataset_without_missing_values.tsf", 48, "rossmann", "star", integer_conversion = TRUE)
 
 # Favourita
 do_local_forecasting("favourita_sales_1000_dataset.tsf", 16, "favourita", "ets", index = NULL)
 do_local_forecasting("favourita_sales_1000_dataset.tsf", 16, "favourita", "arima", index = NULL)
+do_local_forecasting("favourita_sales_1000_dataset.tsf", 16, "favourita", "setar", index = NULL)
+do_local_forecasting("favourita_sales_1000_dataset.tsf", 16, "favourita", "star", index = NULL)
+
+# Tourism Monthly
+do_local_forecasting("tourism_monthly_dataset.tsf", 24, "tourism_monthly", "ets")
+do_local_forecasting("tourism_monthly_dataset.tsf", 24, "tourism_monthly", "arima")
+do_local_forecasting("tourism_monthly_dataset.tsf", 24, "tourism_monthly", "setar")
+do_local_forecasting("tourism_monthly_dataset.tsf", 24, "tourism_monthly", "star")
+
+# M5
+do_local_forecasting("m5_dataset.tsf", 28, "m5", "ets")
+do_local_forecasting("m5_dataset.tsf", 28, "m5", "arima")
+do_local_forecasting("m5_dataset.tsf", 28, "m5", "setar")
+do_local_forecasting("m5_dataset.tsf", 28, "m5", "star")
