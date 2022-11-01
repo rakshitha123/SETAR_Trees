@@ -42,7 +42,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   
   
   # Start timestamp
-  start_time <- Sys.time()
+  all_start_time <- Sys.time()
   
   
   # Set list of defaults
@@ -85,7 +85,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
       th_lag <- NULL
       
       
-      if(nrow(node_data[[n]]) > (2 * (ncol(embedded_series) - 1) + 2) & split_info[n] == 1){ # When this condition is not satisfied, the F-statistic will be negative and model will become unidentifiable
+      if((nrow(node_data[[n]]) >  (2 * (ncol(embedded_series) - 1) + 2)) & split_info[n] == 1){ 
         
         if(fixed_lag){
           if(external_lag > 0)
@@ -93,36 +93,44 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
           else
             lg <- 1
           
-          if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
-            ths <- 1
-          else  
-            ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
+          ss_output <- find.cut.point(as.matrix(node_data[[n]][,-1]), as.matrix(node_data[[n]][,1]), node_data[[n]][,lg+1], start.con$nTh, lag, criterion = "RSS")
+          cost <- ss_output[["RSS.left"]] + ss_output[["RSS.right"]]
           
-          for(ids in 1:length(ths)){ # When the lag is fixed, algorithm will only find the optimal threshold for splitting
-            cost <- SS(ths[ids], node_data[[n]], lg)
-            
-            if(cost <= best_cost) { # Find th which minimizes the squared errors
-              best_cost <- cost;
-              th <- ths[ids]
-              th_lag <- lg
-            }
+          if(cost <= best_cost) { # Find th and th_lag which minimizes the squared errors
+            best_cost <- cost
+            th <- ss_output[["cut.point"]]
+            th_lag <- lg
           }
         }else{
-          for(lg in 1:(ncol(embedded_series) - 1)){
+          for(lg in 1:(ncol(embedded_series) - 1)){ 
             print(paste0("Lag ", lg))
             
-            # Finding optimal lag and threshold that should be used for splitting
-            if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
-              ths <- 1
-            else 
-              ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
+            # Finding the optimal lag and threshold that should be used for splitting
+            # Optimised grid search
+            ss_output <- find.cut.point(as.matrix(node_data[[n]][,-1]), as.matrix(node_data[[n]][,1]), node_data[[n]][,lg+1], start.con$nTh, lag, criterion = "RSS")
+            cost <- ss_output[["RSS.left"]] + ss_output[["RSS.right"]]
+            recheck <- ss_output[["need_recheck"]]
             
-            for(ids in 1:length(ths)){
-              cost <- SS(ths[ids], node_data[[n]], lg)
-              
-              if(cost <= best_cost) { # Find th and th_lag which minimizes the squared errors
-                best_cost <- cost;
-                th <- ths[ids]
+            if(recheck > round(start.con$nTh*0.6)){
+              # If optimised grid search fails, then try with SS()
+              if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
+                ths <- 1
+              else
+                ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
+
+              for(ids in 1:length(ths)){
+                cost <- SS(ths[ids], node_data[[n]], lg, lag)
+
+                if(cost <= best_cost) { # Find th and th_lag which minimizes the squared errors
+                  best_cost <- cost
+                  th <- ths[ids]
+                  th_lag <- lg
+                }
+              }
+            }else{
+              if(cost <= best_cost) { # Find th and th_lag which minimize the squared errors
+                best_cost <- cost
+                th <- ss_output[["cut.point"]]
                 th_lag <- lg
               }
             }
@@ -229,12 +237,17 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   
   if(length(tree) > 0){ # Recording tree information such as the tree depth and number of nodes in the leaf level
     dir.create(file.path(BASE_DIR, "results", "tree_info", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
-    write(paste("No: of nodes in leaf level:", length(leaf_nodes)), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = T)
-    write(paste("Tree depth:", length(tree)), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = T)
-    write.table(num_of_leaf_instances, file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), row.names = F, col.names = F, quote = F, append = T)
+    write(paste("No: of nodes in leaf level:", length(leaf_nodes)), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = FALSE)
+    write(paste("Tree depth:", length(tree)), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = TRUE)
+    write.table(num_of_leaf_instances, file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), row.names = FALSE, col.names = FALSE, quote = FALSE, append = TRUE)
+  }else{
+    write(paste("No: of nodes in leaf level:", 1), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = FALSE)
+    write(paste("Tree depth:", 0), file = file.path(BASE_DIR, "results", "tree_info", paste0(file_name, ".txt")), append = TRUE)
   } 
   
-  # Forecasting
+  # Forecasting start timestamp
+  forecasting_start_time <- Sys.time()
+  
   forecasts <- NULL
   
   for(h in 1:forecast_horizon){
@@ -288,9 +301,8 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   if(scale)
     forecasts <- forecasts * as.vector(series_means)
   
-  
-  # Finish timestamp
-  end_time <- Sys.time()
+  # Training + forecasting finish timestamp
+  all_end_time <- Sys.time()
   
   if(integer_conversion)
     forecasts <- round(forecasts)
@@ -307,9 +319,12 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   
   # Execution time
   dir.create(file.path(BASE_DIR, "results", "execution_times", "setar_tree", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
-  exec_time <- end_time - start_time
-  print(exec_time)
-  write(paste(exec_time, attr(exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", "setar_tree", paste0(file_name, ".txt"), fsep = "/"), append = FALSE)
+  all_exec_time <- all_end_time - all_start_time
+  print(all_exec_time)
+  forecasting_exec_time <- all_end_time - forecasting_start_time
+  write(paste("Full execution time = ", all_exec_time, attr(all_exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", "setar_tree", paste0(file_name, ".txt"), fsep = "/"), append = FALSE)
+  write(paste("Forecasting time = ", forecasting_exec_time, attr(forecasting_exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", "setar_tree", paste0(file_name, ".txt"), fsep = "/"), append = TRUE)
+  write(paste("One interval forecasting time = ", forecasting_exec_time/forecast_horizon, attr(forecasting_exec_time, "units")), file = file.path(BASE_DIR, "results", "execution_times", "setar_tree", paste0(file_name, ".txt"), fsep = "/"), append = TRUE)
   
   # Error calculations
   calculate_errors(forecasts, test_set$series, training_set$series, seasonality, file_name)
@@ -335,6 +350,18 @@ do_setar_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = 
 do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", stopping_criteria = "lin_test")
 do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", stopping_criteria = "error_imp")
 do_setar_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", stopping_criteria = "both")
+
+
+# Tourism Monthly
+do_setar_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", stopping_criteria = "lin_test")
+do_setar_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", stopping_criteria = "error_imp")
+do_setar_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", stopping_criteria = "both")
+
+
+# M5
+do_setar_forecasting("m5_dataset.tsf", 10, 28, "m5", stopping_criteria = "lin_test")
+do_setar_forecasting("m5_dataset.tsf", 10, 28, "m5", stopping_criteria = "error_imp")
+do_setar_forecasting("m5_dataset.tsf", 10, 28, "m5", stopping_criteria = "both")
 
 
 # Rossmann
@@ -371,4 +398,5 @@ do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", in
 do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
 do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
 do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+
 
