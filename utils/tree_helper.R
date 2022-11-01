@@ -74,7 +74,7 @@ SS <- function(p, train_data, current_lg) {
   left <- splitted_nodes$left_node
   right <-  splitted_nodes$right_node 
   
-  if(nrow(left) > 0 & nrow(right) > 0){
+  if((nrow(left) > 0) & (nrow(right) > 0)){ 
     residuals_l <- left$y - fit_global_model(left, NULL)$predictions
     residuals_r <- right$y - fit_global_model(right, NULL)$predictions
     current_residuals <- c(residuals_l, residuals_r)

@@ -109,7 +109,7 @@ create_tree_input_matrix <- function(training_set, lag, scale = FALSE, test_set 
   for (i in 1:length(dataset)) {
     print(i)
     time_series <- as.numeric(unlist(dataset[i], use.names = FALSE))
-    
+
     mean <- mean(time_series)
     
     if(mean != 0){
@@ -200,7 +200,7 @@ create_tree_input_matrix <- function(training_set, lag, scale = FALSE, test_set 
     colnames(final_lags)[(ncol(final_lags) - length(numerical_covariates) + 1):ncol(final_lags)] <- numerical_covariates
   }
   
-  list(embedded_series, final_lags, series_means) 
+  list(embedded_series, final_lags, series_means)  
 }
 
 
