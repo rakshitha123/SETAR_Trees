@@ -4,7 +4,7 @@ source(file.path(BASE_DIR, "configs", "configs.R", fsep = "/"))
 
 
 # Function to execute a SETAR tree
-setar_tree_forecasting <- function(tree_data, test_set, cat_unique_vals, lag, forecast_horizon, final_lags, feature_indexes, depth = 1000, significance = 0.5, seq_significance = TRUE, significance_divider = 2, stopping_criteria = "both", error_threshold = 0.03, random_lag = FALSE, random_threshold = FALSE, random_significance = FALSE, random_error_threshold = FALSE, random_configuration = FALSE, num_leaves = 100000, min_data_in_leaf = 0, categorical_covariates = NULL, numerical_covariates = NULL){
+setar_tree_forecasting <- function(tree_data, test_set, cat_unique_vals, lag, forecast_horizon, final_lags, feature_indexes, depth = 1000, significance = 0.5, seq_significance = TRUE, significance_divider = 2, stopping_criteria = "both", error_threshold = 0.03, random_significance = FALSE, random_error_threshold = FALSE, num_leaves = 100000, min_data_in_leaf = 0, categorical_covariates = NULL, numerical_covariates = NULL){
   tree <- list() # Stores the nodes in tree in each level
   th_lags <- list() # Stores the lags used during splitting
   thresholds <- list() # Stores the thresholds used during splitting
@@ -40,74 +40,41 @@ setar_tree_forecasting <- function(tree_data, test_set, cat_unique_vals, lag, fo
       th_lag <- NULL
       
       
-      if((nrow(node_data[[n]]) > (2* (ncol(node_data[[n]]) - 1) + 2)) & (split_info[n] == 1) & (nrow(node_data[[n]]) >= min_data_in_leaf)){ # When this condition is not satisfied, the F-statistic will be negative and model will become unidentifiable
+      if((nrow(node_data[[n]]) > (2* (ncol(node_data[[n]]) - 1) + 2)) & (split_info[n] == 1) & (nrow(node_data[[n]]) >= min_data_in_leaf)){ 
         
-        if(random_lag){
-          set.seed(d+n)
-          lg <- sample(1:length(feature_indexes), 1)
-          th_lag <- lg
-          
-          print(paste0("Lag ", lg))
-          
-          if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
-            ths <- 1
-          else  
-            ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
-          
-
-          if(random_threshold){
-            set.seed(d+n)
-            th <- sample(ths, 1)
-            best_cost <- SS(th, node_data[[n]], lg)
-          }else{
-            for(ids in 1:length(ths)){
-              cost <- SS(ths[ids], node_data[[n]], lg)
+        for(lg in feature_indexes){  # Find the optimal lag and the threshold to make a split
+            print(paste0("Lag ", lg))
+                
+            # Optimised grid search
+            ss_output <- find.cut.point(as.matrix(node_data[[n]][,-1]), as.matrix(node_data[[n]][,1]), node_data[[n]][,(lg+1)], start.con$nTh, lag, criterion = "RSS")
+            cost <- ss_output[["RSS.left"]] + ss_output[["RSS.right"]]
+            recheck <- ss_output[["need_recheck"]]
+            
+            if(recheck > round(start.con$nTh*0.6)){
+              # Old grid search
+              if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
+                ths <- 1
+              else
+                ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
               
-              if(cost <= best_cost) { # find th which minimizes the squared errors
-                best_cost <- cost;
-                th <- ths[ids]
+              for(ids in 1:length(ths)){
+                cost <- SS(ths[ids], node_data[[n]], lg)
+                
+                if(cost <= best_cost) { # Find th and th_lag which minimizes the squared errors
+                  best_cost <- cost
+                  th <- ths[ids]
+                  th_lag <- lg
+                }
+              }
+            }else{
+              if(cost <= best_cost) { # Find th and th_lag which minimize the squared errors
+                best_cost <- cost
+                th <- ss_output[["cut.point"]]
+                th_lag <- lg
               }
             }
-          }
-        }else{ # Find the optimal lag and the threshold to make a split
-          tune_costs <- NULL
-          tune_lags <- NULL
-          tune_thresholds <- NULL
-          
-          for(lg in 1:length(feature_indexes)){
-            print(paste0("Lag ", lg))
-            
-            if(!is.null(categorical_indexes) & (lg %in% categorical_indexes))
-              ths <- 1
-            else 
-              ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
-            
-
-            for(ids in 1:length(ths)){
-              cost <- SS(ths[ids], node_data[[n]], lg)
-              
-              tune_lags <- c(tune_lags, lg)
-              tune_thresholds <- c(tune_thresholds, ths[ids])
-              tune_costs <- c(tune_costs, cost)
-            }
-          }
-          
-          tune_results <- data.frame("lag" = tune_lags, "threshold" = tune_thresholds, "cost" = tune_costs)
-          tune_results <- tune_results[order(tune_results$cost),]
-          top_tune_results <- head(tune_results, 5)
-          
-          if(random_configuration){
-            set.seed(d+n)
-            chosen_config <- top_tune_results[sample(1:5, 1),]
-          }else
-            chosen_config <- top_tune_results[1,]
-          
-          best_cost <- chosen_config$cost;
-          th <- chosen_config$threshold
-          th_lag <- chosen_config$lag
         }
-        
-        
+      
         if(best_cost != Inf){
           splited_nodes <- create_split(node_data[[n]], th_lag, th) # Get the child nodes
           
@@ -272,21 +239,18 @@ setar_tree_forecasting <- function(tree_data, test_set, cat_unique_vals, lag, fo
 # bagging_fraction - The percentage of instances that should be used to train each tree in the forest
 # bagging_freq - The number of trees in the forest
 # feature fraction - The percentage of features that should be used to train each tree in the forest
-# random_lag - Whether a random lag should be used for each split. Otherwise, it will find the optimal lag for each split
-# random_threshold - Whether a random threshold should be used for each split. Otherwise, it will find the optimal threshold for each split
 # random_significance - Whether a random significance should be considered to assess each node split (When set to TRUE, the "significance" parameter will be ignored)
 # random_error_threshold - Whether a random error threshold should be considered to assess each node split (When set to TRUE, the "error_threshold" parameter will be ignored)
 # random_tree_significance - Whether a random singificance should be considered for splitting per each tree (Each node split within the tree will consider the same significance level. When set to TRUE, the "significance" parameter will be ignored)
 # random_significance_divider - Whether a random singificance divider should be considered for splitting per each tree (When set to TRUE, the "significance_divider" parameter will be ignored)
 # random_tree_error_threshold - Whether a random error threshold should be considered for splitting per each tree (Each node split within the tree will consider the same error threshold. When set to TRUE, the "error_threshold" parameter will be ignored)
-# random_configuration - Whether the lags and thresholds use for each split should be randomly chosen from a set of optimal lag-threshold combinations
 # num_leaves - The maximum number of leaves that a tree can have. This is 100000 by default and thus, actually the number of leaf nodes will be controlled by the stopping criteria, unless you specify a lower value for this parameter
-# min_data_in_leaf - The minimum number of instances that should be there in each leaf node. This is 0 by default and thus, actually the number of instances per each leaf node will be controlled by the stopping criteria, unless you specify a higher value for this parameter
+# min_data_in_leaf - The minimum number of instances that should be there in each leaf node. This is 0 by default 
 # categorical_covariates - A vector containing the names of external categorical covariates. The .tsf file should contain series corresponding with each categorical covariate
 # numerical_covariates - A vector containing the names of external numerical covariates. The .tsf file should contain series corresponding with each numerical covariate
 # series_prefix - The prefix used to identify original time series in the .tsf file. This is only required when the models are trained with external covariates
 # splitter - The splitter used in the names of time series in the .tsf file to separate the series type and number. This is only required when the models are trained with external covariates
-do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 1000, key = "series_name", index = "start_timestamp", integer_conversion = FALSE, significance = 0.05, seq_significance = TRUE, significance_divider = 2, error_threshold = 0.03, stopping_criteria = "both", bagging_fraction = 0.8, bagging_freq = 10, feature_fraction = 1, random_lag = FALSE, random_threshold = FALSE, random_significance = FALSE, random_error_threshold = FALSE, random_tree_significance = FALSE, random_significance_divider = FALSE, random_tree_error_threshold = FALSE, random_configuration = FALSE, num_leaves = 100000, min_data_in_leaf = 0, categorical_covariates = NULL, numerical_covariates = NULL, series_prefix = NULL, splitter = "_"){
+do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, dataset_name, depth = 1000, key = "series_name", index = "start_timestamp", integer_conversion = FALSE, significance = 0.05, seq_significance = TRUE, significance_divider = 2, error_threshold = 0.03, stopping_criteria = "both", bagging_fraction = 0.8, bagging_freq = 10, feature_fraction = 1, random_significance = FALSE, random_error_threshold = FALSE, random_tree_significance = FALSE, random_significance_divider = FALSE, random_tree_error_threshold = FALSE, num_leaves = 100000, min_data_in_leaf = 0, categorical_covariates = NULL, numerical_covariates = NULL, series_prefix = NULL, splitter = "_"){
   
   # Creating training and test sets
   loaded_data <- create_train_test_sets(input_file_name, key, index, forecast_horizon, categorical_covariates, numerical_covariates, series_prefix, splitter)
@@ -338,7 +302,7 @@ do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, 
     }
     
     # Execute individual SETAR trees
-    all_tree_forecasts[[bag_f]] <- setar_tree_forecasting(current_tree_data, test_set, cat_unique_vals, lag, forecast_horizon, full_final_lags, feature_indexes, depth, significance, seq_significance, significance_divider, stopping_criteria, error_threshold, random_lag, random_threshold, random_significance, random_error_threshold, random_configuration, num_leaves, min_data_in_leaf, categorical_covariates, numerical_covariates)
+    all_tree_forecasts[[bag_f]] <- setar_tree_forecasting(current_tree_data, test_set, cat_unique_vals, lag, forecast_horizon, full_final_lags, feature_indexes, depth, significance, seq_significance, significance_divider, stopping_criteria, error_threshold, random_significance, random_error_threshold, num_leaves, min_data_in_leaf, categorical_covariates, numerical_covariates)
   }
  
   final_forecasts <- all_tree_forecasts[[1]]
@@ -356,21 +320,9 @@ do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, 
     final_forecasts <- round(final_forecasts)
   
   file_name <- paste0(dataset_name, "_lag_", lag, "_setar_forest_", bagging_freq, "_bagging_frac_", bagging_fraction, "_feature_frac_", feature_fraction, "_", stopping_criteria)
-
-  if(stopping_criteria != "lin_test" & !random_error_threshold)
-    file_name <- paste0(file_name, "_error_threshold_", error_threshold)
-  
-  if(seq_significance)
-    file_name <- paste0(file_name, "_seq_significance")
   
   if(!is.null(categorical_covariates) | !is.null(numerical_covariates))
     file_name <- paste0(file_name, "_with_covariates")
-  
-  if(random_lag)
-    file_name <- paste0(file_name, "_random_lag")
-  
-  if(random_threshold)
-    file_name <- paste0(file_name, "_random_threshold")
   
   if(random_significance)
     file_name <- paste0(file_name, "_random_significance")
@@ -386,9 +338,6 @@ do_setar_forest_forecasting <- function(input_file_name, lag, forecast_horizon, 
   
   if(random_significance_divider)
     file_name <- paste0(file_name, "_random_significance_divider")
-  
-  if(random_configuration)
-    file_name <- paste0(file_name, "_random_configuration")
   
   dir.create(file.path(BASE_DIR, "results", "forecasts", "setar_forest", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
   write.table(final_forecasts, file.path(BASE_DIR, "results", "forecasts", "setar_forest", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote = FALSE)
@@ -412,6 +361,11 @@ do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logi
 do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
 do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
 
+# Experiments with different forest sizes
+do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 5, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 20, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+do_setar_forest_forecasting("chaotic_logistic_dataset.tsf", 10, 8, "chaotic_logistic", index = NULL, bagging_fraction = 0.8, bagging_freq = 50, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+
 
 # Mackey-Glass
 do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
@@ -423,6 +377,18 @@ do_setar_forest_forecasting("mackey_glass_dataset.tsf", 10, 8, "mackey_glass", i
 do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
 do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
 do_setar_forest_forecasting("tourism_quarterly_dataset.tsf", 10, 8, "tourism_quarterly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+
+
+# Tourism Monthly
+do_setar_forest_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
+do_setar_forest_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
+do_setar_forest_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
+
+
+# M5
+do_setar_forest_forecasting("m5_dataset.tsf", 10, 28, "m5", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE)
+do_setar_forest_forecasting("m5_dataset.tsf", 10, 28, "m5", bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE)
+do_setar_forest_forecasting("m5_dataset.tsf", 10, 28, "m5", bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE)
 
 
 # Kaggle Web Traffic
@@ -459,4 +425,3 @@ do_setar_forest_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favouri
 do_setar_forest_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, categorical_covariates = "wday", series_prefix = "T")
 do_setar_forest_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_error_threshold = TRUE, categorical_covariates = "wday", series_prefix = "T")
 do_setar_forest_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita", index = NULL, bagging_fraction = 0.8, bagging_freq = 10, random_tree_significance = TRUE, random_significance_divider = TRUE, random_tree_error_threshold = TRUE, categorical_covariates = "wday", series_prefix = "T")
-

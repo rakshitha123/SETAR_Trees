@@ -67,7 +67,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     else
       categorical_indexes <- (lag+1):(ncol(final_lags) - length(numerical_covariates))
   }
-    
+  
   
   for(d in 1:depth){
     print(paste0("Depth: ", d))
@@ -117,10 +117,10 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
                 ths <- 1
               else
                 ths <- seq(min(node_data[[n]][,lg+1]), max(node_data[[n]][,lg+1]), length.out = start.con$nTh) # Threshold interval is the minimum and maximum values in the corresponding lag
-
+              
               for(ids in 1:length(ths)){
-                cost <- SS(ths[ids], node_data[[n]], lg, lag)
-
+                cost <- SS(ths[ids], node_data[[n]], lg)
+                
                 if(cost <= best_cost) { # Find th and th_lag which minimizes the squared errors
                   best_cost <- cost
                   th <- ths[ids]
@@ -230,7 +230,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     file_name <- paste0(file_name, "_error_threshold_", error_threshold)
   
   if(seq_significance)
-   file_name <- paste0(file_name, "_seq_significance_", significance_divider)
+    file_name <- paste0(file_name, "_seq_significance_", significance_divider)
   
   if(scale)
     file_name <- paste0(file_name, "_with_scaling")
