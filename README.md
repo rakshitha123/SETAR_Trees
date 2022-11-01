@@ -24,8 +24,8 @@ The forecasts, errors and execution times related to the SETAR-Forest model will
 See the examples provided in "./experiments/setar_forest_experiments.R" script for more details.
 
 ## Executing the Benchmark Models
-In our paper, we have compared the performance of our proposed SETAR-Tree and forest models against a number of benchmarks including 2 traditional univariate forecasting models:
-Exponential Smoothing (ETS) and Auto-Regressive Integrated Moving Average (ARIMA), and 7 global forecasting models: PR, Feed-Forward Neural Network (FFNN),
+In our paper, we have compared the performance of our proposed SETAR-Tree and forest models against a number of benchmarks including 4 traditional univariate forecasting models:
+Exponential Smoothing (ETS), Auto-Regressive Integrated Moving Average (ARIMA), SETAR and Smooth Transition Autoregressive (STAR), and 8 global forecasting models: PR, Cubist, Feed-Forward Neural Network (FFNN),
 Regression Tree, LightGBM, CatBoost, eXtreme Gradient Boosting (XGBoost) and Random Forest.
 
 The traditional univariate forecasting models can be executed using the "do_local_forecasting" function implemented in "./experiments/local_model_experiments.R" script.
@@ -46,7 +46,7 @@ When using this repository, please cite:
 ```{r} 
 @misc{godahewa2022setar,
   title = {SETAR-Tree: A Novel and Accurate Tree Algorithm for Global Time Series Forecasting},
-  author = {Godahewa, Rakshitha and Webb, Geoffrey I. and Bergmeir, Christoph},
+  author = {Godahewa, Rakshitha and Webb, Geoffrey I. and Schmidt, Daniel and Bergmeir, Christoph},
   year = {2022}
 }
 ```
