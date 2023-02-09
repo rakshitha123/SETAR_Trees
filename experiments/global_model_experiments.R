@@ -39,13 +39,7 @@ do_global_forecasting <- function(input_file_name, lag, forecast_horizon, datase
   if(integer_conversion)
     forecasts <- round(forecasts)
   
-  file_name <- paste0(dataset_name, "_lag_", lag, "_", method_name)
-  
-  if(scale)
-    file_name <- paste0(file_name, "_with_scaling")
-  
-  if(!is.null(categorical_covariates) | !is.null(numerical_covariates))
-    file_name <- paste0(file_name, "_with_covariates")
+  file_name <- paste0(dataset_name, "_", method_name)
   
   dir.create(file.path(BASE_DIR, "results", "forecasts", "global_models", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
   write.table(forecasts, file.path(BASE_DIR, "results", "forecasts", "global_models", paste0(file_name, "_forecasts.txt"), fsep = "/"), row.names = FALSE, col.names = FALSE, quote=FALSE)
@@ -76,9 +70,9 @@ do_global_forecasting("m5_dataset.tsf", 10, 28, "m5", method_name = "pooled_regr
 
 
 # With covariates
-do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", method_name = "pooled_regression", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "pooled_regression", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "pooled_regression", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", method_name = "pooled_regression", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", method_name = "pooled_regression", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", method_name = "pooled_regression", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
 
 # Cubist
@@ -94,9 +88,9 @@ do_global_forecasting("m5_dataset.tsf", 10, 28, "m5", method_name = "cubist")
 
 
 # With covariates
-do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", method_name = "cubist", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "cubist", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "cubist", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", method_name = "cubist", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", method_name = "cubist", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", method_name = "cubist", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
 
 # CatBoost
@@ -111,9 +105,9 @@ do_global_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", 
 do_global_forecasting("m5_dataset.tsf", 10, 28, "m5", method_name = "catboost")
 
 # With covariates
-do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", method_name = "catboost", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "catboost", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "catboost", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", method_name = "catboost", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", method_name = "catboost", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", method_name = "catboost", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
 
 # Regression Tree
@@ -128,9 +122,9 @@ do_global_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", 
 do_global_forecasting("m5_dataset.tsf", 10, 28, "m5", method_name = "regression_tree")
 
 # With covariates
-do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", method_name = "regression_tree", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "regression_tree", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "regression_tree", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", method_name = "regression_tree", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", method_name = "regression_tree", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", method_name = "regression_tree", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
 
 # LightGBM
@@ -145,9 +139,9 @@ do_global_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", 
 do_global_forecasting("m5_dataset.tsf", 10, 28, "m5", method_name = "lightgbm")
 
 # With covariates
-do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", method_name = "lightgbm", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "lightgbm", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "lightgbm", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", method_name = "lightgbm", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", method_name = "lightgbm", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", method_name = "lightgbm", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
 
 # XGBoost
@@ -162,9 +156,9 @@ do_global_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", 
 do_global_forecasting("m5_dataset.tsf", 10, 28, "m5", method_name = "xgboost")
 
 # With covariates
-do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", method_name = "xgboost", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "xgboost", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "xgboost", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", method_name = "xgboost", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", method_name = "xgboost", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", method_name = "xgboost", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
 
 # Random Forest
@@ -179,9 +173,9 @@ do_global_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", 
 do_global_forecasting("m5_dataset.tsf", 10, 28, "m5", method_name = "rf")
 
 # With covariates
-do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", method_name = "rf", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "rf", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "rf", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", method_name = "rf", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", method_name = "rf", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", method_name = "rf", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 
 
 # FFNN
@@ -196,7 +190,7 @@ do_global_forecasting("tourism_monthly_dataset.tsf", 15, 24, "tourism_monthly", 
 do_global_forecasting("m5_dataset.tsf", 10, 28, "m5", method_name = "ffnn")
 
 # With covariates
-do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", method_name = "ffnn", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000_dates", method_name = "ffnn", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
-do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000_dates", method_name = "ffnn", index = NULL, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", method_name = "ffnn", integer_conversion = T, index = NULL, categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_global_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", method_name = "ffnn", index = NULL, integer_conversion = T, categorical_covariates = "wday", series_prefix = "T")
+do_global_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", method_name = "ffnn", index = NULL, categorical_covariates = "wday", series_prefix = "T")
 

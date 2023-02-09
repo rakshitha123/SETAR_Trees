@@ -215,25 +215,7 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
   }
   
   
-  file_name <- paste0(dataset_name, "_lag_", lag, "_depth_", depth, "_setar_", stopping_criteria)
-  
-  if(!is.null(numerical_covariates))
-    file_name <- paste0(file_name, "_numerical_covariates")
-  
-  if(!is.null(categorical_covariates))
-    file_name <- paste0(file_name, "_with_one_hot_encoding")
-  
-  if(fixed_lag)
-    file_name <- paste0(file_name, "_fixed_lag")
-  
-  if(stopping_criteria != "lin_test")
-    file_name <- paste0(file_name, "_error_threshold_", error_threshold)
-  
-  if(seq_significance)
-    file_name <- paste0(file_name, "_seq_significance_", significance_divider)
-  
-  if(scale)
-    file_name <- paste0(file_name, "_with_scaling")
+  file_name <- paste0(dataset_name, "_setartree_", stopping_criteria)
   
   if(length(tree) > 0){ # Recording tree information such as the tree depth and number of nodes in the leaf level
     dir.create(file.path(BASE_DIR, "results", "tree_info", fsep = "/"), showWarnings = FALSE, recursive = TRUE)
@@ -371,9 +353,9 @@ do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "ros
 do_setar_forecasting("rossmann_dataset_without_missing_values.tsf", 10, 48, "rossmann", integer_conversion = TRUE, stopping_criteria = "both")
 
 # With covariates
-do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", index = NULL, integer_conversion = TRUE, stopping_criteria = "lin_test", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", index = NULL, integer_conversion = TRUE, stopping_criteria = "error_imp", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
-do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann", index = NULL, integer_conversion = TRUE, stopping_criteria = "both", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", index = NULL, integer_conversion = TRUE, stopping_criteria = "lin_test", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", index = NULL, integer_conversion = TRUE, stopping_criteria = "error_imp", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
+do_setar_forecasting("rossmann_data_with_corvariates.tsf", 10, 48, "rossmann_with_cov", index = NULL, integer_conversion = TRUE, stopping_criteria = "both", categorical_covariates = c("Open", "Promo", "StateHoliday", "SchoolHoliday"), numerical_covariates = "Customers", series_prefix = "T")
 
 
 # Kaggle Web Traffic
@@ -383,9 +365,9 @@ do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf
 do_setar_forecasting("kaggle_web_traffic_dataset_1000_without_missing_values.tsf", 10, 59, "kaggle_daily", integer_conversion = TRUE, stopping_criteria = "both")
 
 # With covariates
-do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, integer_conversion = TRUE, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
-do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, integer_conversion = TRUE, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
-do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_1000", index = NULL, integer_conversion = TRUE, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", index = NULL, integer_conversion = TRUE, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", index = NULL, integer_conversion = TRUE, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("kaggle_1000_with_date_corvariates.tsf", 10, 59, "kaggle_daily_with_cov", index = NULL, integer_conversion = TRUE, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
 
 
 # Favourita 
@@ -395,8 +377,8 @@ do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", in
 do_setar_forecasting("favourita_sales_1000_dataset.tsf", 10, 16, "favourita", index = NULL, stopping_criteria = "both")
 
 # With covariates
-do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
-do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
-do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_1000", index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", index = NULL, stopping_criteria = "lin_test", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", index = NULL, stopping_criteria = "error_imp", categorical_covariates = "wday", series_prefix = "T")
+do_setar_forecasting("favourita_1000_with_date_corvariates.tsf", 10, 16, "favourita_with_cov", index = NULL, stopping_criteria = "both", categorical_covariates = "wday", series_prefix = "T")
 
 
