@@ -42,7 +42,7 @@ See the examples provided in [./experiments/global_model_experiments.R](https://
 
 
 # Experimental Datasets
-The experimental datasets are available in the "datasets" folder.
+The experimental datasets are available in the [datasets](https://github.com/rakshitha123/SETAR_Trees/tree/master/datasets) folder.
 
 
 # Recreating the Results Tables
@@ -50,7 +50,7 @@ All results tables in our [paper](https://arxiv.org/pdf/2211.08661.pdf) are repr
 
 For that, first run all the experiments including the SETAR-Tree experiments ([./experiments/setar_tree_experiments.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/experiments/setar_tree_experiments.R)), SETAR-Forest experiments ([./experiments/setar_forest_experiments.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/experiments/setar_forest_experiments.R)), local model benchmarking experiments ([./experiments/local_model_experiments.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/experiments/local_model_experiments.R)) and global model benchmarking experiments ([./experiments/global_model_experiments.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/experiments/global_model_experiments.R)).
 
-The results tables can be then recreated using the scripts inside the "tables" folder. Please use the scripts [recreate_table_2.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/tables/recreate_table_2.R), [recreate_table_3.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/tables/recreate_table_3.R) and [recreate_table_4.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/tables/recreate_table_4.R), respectively, to recreate Tables 2, 3 and 4 in our [paper](https://arxiv.org/pdf/2211.08661.pdf).
+The results tables can be then recreated using the scripts inside the [tables](https://github.com/rakshitha123/SETAR_Trees/tree/master/tables) folder. Please use the scripts [recreate_table_2.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/tables/recreate_table_2.R), [recreate_table_3.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/tables/recreate_table_3.R) and [recreate_table_4.R](https://github.com/rakshitha123/SETAR_Trees/blob/master/tables/recreate_table_4.R), respectively, to recreate Tables 2, 3 and 4 in our [paper](https://arxiv.org/pdf/2211.08661.pdf).
 
 
 # Citing Our Work
