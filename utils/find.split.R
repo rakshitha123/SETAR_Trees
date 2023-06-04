@@ -133,16 +133,16 @@ find.cut.point <- function(X, y, x.ix, k, lag, criterion = "AICc")
   
   # Create a "linear model"
   r.left = list()
-  r.left$beta0 <- b.left[1,I]
-  r.left$beta <- b.left[2:(p),I]
+  r.left$beta0 <- 0
+  r.left$beta <- b.left[1:(p),I]
   r.left$RSS = RSS.left[I]
   r.left$AICc = AICc.left[I]
   
   class(r.left) = "my.lm"  
 
   r.right = list()
-  r.right$beta0 <- b.right[1,I]
-  r.right$beta <- b.right[2:(p),I]
+  r.right$beta0 <- 0
+  r.right$beta <- b.right[1:(p),I]
   r.right$RSS = RSS.right[I]
   r.right$AICc = AICc.right[I]
   

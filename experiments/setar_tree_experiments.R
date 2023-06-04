@@ -238,10 +238,15 @@ do_setar_forecasting <- function(input_file_name, lag, forecast_horizon, dataset
     
     if(length(tree) > 0){
       for(f in 1:nrow(final_lags)){
-        leaf_index <- get_leaf_index(final_lags[f,], th_lags, thresholds) # Identify the leaf node corresponding with a given test instance
+        inst <- as.data.frame(final_lags[f,])
+        
+        if(lag == 1)
+          colnames(inst) <- "Lag1"
+        
+        leaf_index <- get_leaf_index(inst, th_lags, thresholds) # Identify the leaf node corresponding with a given test instance
         leaf_model <- leaf_trained_models[[leaf_index]]
         
-        horizon_predictions <- c(horizon_predictions, predict.glm(object = leaf_model, newdata = as.data.frame(final_lags[f,]))) 
+        horizon_predictions <- c(horizon_predictions, predict.glm(object = leaf_model, newdata = inst)) 
       }
     }else{
       horizon_predictions <- predict.glm(object = final_trained_model, newdata = as.data.frame(final_lags))
